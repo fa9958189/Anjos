@@ -2366,6 +2366,7 @@ function mapDbFinancialRecordToFinancialRecord(record: DbFinancialRecord): Finan
 }
 
 export function App() {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginSubmitting, setLoginSubmitting] = useState(false);
@@ -2417,7 +2418,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/dashboard/summary')
+    fetch(`${apiBaseUrl}/api/dashboard/summary`)
       .then((response) => response.json())
       .then((payload: ApiPayload) => {
         setData(payload);

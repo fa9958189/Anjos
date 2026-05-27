@@ -3,8 +3,25 @@ import express from 'express';
 
 const app = express();
 const port = Number(process.env.PORT ?? 3333);
+const corsOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173,http://127.0.0.1:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
-app.use(cors({ origin: ['http://localhost:5173', 'http://127.0.0.1:5173'] }));
+app.disable('x-powered-by');
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || corsOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('Origem nao permitida pelo CORS'));
+    }
+  })
+);
 app.use(express.json());
 
 const dashboardPayload = {
@@ -43,6 +60,10 @@ const dashboardPayload = {
     }
   ]
 };
+
+app.get('/', (_request, response) => {
+  response.json({ status: 'ok', service: 'Anjos Ambiental API', health: '/health' });
+});
 
 app.get('/health', (_request, response) => {
   response.json({ status: 'ok', service: 'Anjos Ambiental API' });
