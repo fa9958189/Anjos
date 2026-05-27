@@ -9,7 +9,9 @@ import {
   FolderOpen,
   FolderKanban,
   Home,
+  KeyRound,
   Leaf,
+  LogOut,
   MessageCircle,
   MessageSquareText,
   Menu,
@@ -26,6 +28,7 @@ import {
   X
 } from 'lucide-react';
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
+import { supabase } from './lib/supabase';
 
 type Summary = {
   activeProcesses: number;
@@ -64,6 +67,11 @@ type SystemUser = {
 
 type UserFormState = Pick<SystemUser, 'name' | 'email' | 'password' | 'role'>;
 
+type LoginFormState = {
+  email: string;
+  password: string;
+};
+
 type Client = {
   id: string;
   type: 'Pessoa física' | 'Pessoa jurídica';
@@ -87,6 +95,24 @@ type Client = {
 
 type ClientFormState = Omit<Client, 'id' | 'status' | 'properties' | 'processes' | 'pendingDocuments'>;
 
+type DbClient = {
+  id: string;
+  type: 'pessoa_fisica' | 'pessoa_juridica';
+  name: string;
+  document: string;
+  rg_state_registration: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  source: string | null;
+  responsible: string | null;
+  demand: string | null;
+  notes: string | null;
+  status: 'novo' | 'em_atendimento' | 'com_processo_ativo' | 'inativo';
+};
+
 type TechnicalAnalysis = {
   status: 'Em análise' | 'Aprovado' | 'Reprovado' | 'Necessita complementação';
   areaSituation: string;
@@ -98,7 +124,61 @@ type TechnicalAnalysis = {
   analysisDate: string;
 };
 
+type DbTechnicalAnalysis = {
+  id: string;
+  process_id: string;
+  status: 'em_analise' | 'aprovado' | 'reprovado' | 'necessita_complementacao';
+  result: 'pode_gerar_proposta' | 'precisa_complementar_informacoes' | 'servico_inviavel';
+  area_situation: string | null;
+  pending_issues: string | null;
+  additional_needs: string | null;
+  technical_opinion: string | null;
+  responsible: string | null;
+  analysis_date: string | null;
+};
+
+type DbProcess = {
+  id: string;
+  process_number: string;
+  client_id: string;
+  property_id: string | null;
+  service: string;
+  demand: string | null;
+  status: string;
+  priority: 'normal' | 'alta' | 'urgente';
+  responsible: string | null;
+  opened_at: string | null;
+  due_date: string | null;
+  current_stage: string | null;
+  notes: string | null;
+  clients?: DbClient | null;
+  properties?: DbProperty | null;
+  technical_analyses?: DbTechnicalAnalysis | null;
+};
+
+type DbProperty = {
+  id: string;
+  client_id: string;
+  name: string;
+  type: string;
+  city: string | null;
+  state: string | null;
+  address: string | null;
+  total_area: string | null;
+  productive_area: string | null;
+  registration: string | null;
+  registry_office: string | null;
+  car: string | null;
+  ccir: string | null;
+  itr: string | null;
+  coordinates: string | null;
+  environmental_notes: string | null;
+};
+
 type EnvironmentalProcess = {
+  dbId?: string;
+  clientId?: string;
+  propertyId?: string;
   id: string;
   client: string;
   clientPhone: string;
@@ -133,6 +213,7 @@ type CommercialContact = {
 };
 
 type Proposal = {
+  dbId?: string;
   id: string;
   processId: string;
   client: string;
@@ -157,6 +238,44 @@ type Proposal = {
   contacts: CommercialContact[];
 };
 
+type DbProposalService = {
+  id: string;
+  proposal_id: string;
+  description: string;
+  value: number | null;
+  sort_order: number | null;
+};
+
+type DbProposal = {
+  id: string;
+  proposal_number: string;
+  process_id: string;
+  client_id: string;
+  property_id: string | null;
+  status: 'gerar_proposta' | 'proposta_gerada' | 'proposta_aprovada' | 'proposta_recusada';
+  client_name: string;
+  client_phone: string | null;
+  property_name: string | null;
+  city_state: string | null;
+  responsible: string | null;
+  proposal_date: string | null;
+  total_value: number | null;
+  entry_percentage: number | null;
+  entry_value: number | null;
+  remaining_value: number | null;
+  payment_methods: string[] | null;
+  payment_terms: string | null;
+  deadline: string | null;
+  validity: string | null;
+  technical_notes: string | null;
+  observations: string | null;
+  generated_at: string | null;
+  approved_at: string | null;
+  refused_at: string | null;
+  proposal_services?: DbProposalService[];
+  processes?: { process_number: string; service: string } | null;
+};
+
 type ProposalFormState = {
   id: string;
   date: string;
@@ -178,6 +297,11 @@ type ProposalFormState = {
 type ContractStatus = 'Aguardando contrato' | 'Contrato gerado' | 'Vigente' | 'Cancelado';
 
 type ContractRecord = {
+  dbId?: string;
+  proposalDbId?: string;
+  processDbId?: string;
+  clientDbId?: string;
+  propertyDbId?: string;
   id: string;
   proposalId: string;
   processId: string;
@@ -215,7 +339,43 @@ type ContractRecord = {
   activatedAt?: string;
 };
 
+type DbContract = {
+  id: string;
+  contract_number: string;
+  proposal_id: string;
+  process_id: string;
+  client_id: string;
+  property_id: string | null;
+  status: 'aguardando_contrato' | 'contrato_gerado' | 'vigente' | 'cancelado';
+  client_name: string;
+  client_document: string | null;
+  client_address: string | null;
+  client_city: string | null;
+  client_state: string | null;
+  client_phone: string | null;
+  property_name: string | null;
+  service_description: string;
+  total_value: number | null;
+  entry_percentage: number | null;
+  entry_value: number | null;
+  remaining_value: number | null;
+  payment_terms: string | null;
+  execution_deadline: string | null;
+  contract_date: string | null;
+  expiration_date: string | null;
+  company_name: string | null;
+  company_cnpj: string | null;
+  company_address: string | null;
+  company_phone: string | null;
+  signed_file_name: string | null;
+  generated_at: string | null;
+  activated_at: string | null;
+  proposals?: { proposal_number: string; approved_at: string | null } | null;
+  processes?: { process_number: string } | null;
+};
+
 type OfficeAction = {
+  id?: string;
   type: string;
   agency: string;
   protocol: string;
@@ -226,6 +386,7 @@ type OfficeAction = {
 };
 
 type FieldVisit = {
+  id?: string;
   date: string;
   responsible: string;
   location: string;
@@ -269,6 +430,7 @@ type ExecutionHistoryItem = {
 };
 
 type FieldChecklistItem = {
+  dbId?: string;
   id: string;
   title: string;
   status: 'Não iniciado' | 'Em andamento' | 'Concluído' | 'Pendente';
@@ -277,6 +439,8 @@ type FieldChecklistItem = {
 };
 
 type ExecutionRecord = {
+  dbId?: string;
+  processDbId?: string;
   processId: string;
   officeActions: OfficeAction[];
   fieldVisits: FieldVisit[];
@@ -286,8 +450,106 @@ type ExecutionRecord = {
   internalNotes?: string;
 };
 
+
+type DbDocument = {
+  id: string;
+  client_id: string | null;
+  property_id: string | null;
+  process_id: string | null;
+  category: string;
+  name: string | null;
+  file_name: string;
+  bucket_name: string | null;
+  storage_path: string | null;
+  mime_type: string | null;
+  file_size: number | null;
+  uploaded_by: string | null;
+  uploaded_at: string | null;
+  clients?: { name: string } | null;
+  properties?: { name: string } | null;
+  processes?: { process_number: string } | null;
+};
+
+type DbExecution = {
+  id: string;
+  process_id: string;
+  status: string | null;
+  department: string | null;
+  responsible: string | null;
+  started_at: string | null;
+  expected_delivery_date: string | null;
+  progress: number | null;
+  execution_tasks?: DbExecutionTask[];
+  field_visits?: DbFieldVisit[];
+  field_checklist_items?: DbFieldChecklistItem[];
+  execution_history?: DbExecutionHistoryItem[];
+  execution_notes?: DbExecutionNote[];
+};
+
+type DbExecutionTask = {
+  id: string;
+  execution_id: string;
+  process_id: string | null;
+  task_key: string | null;
+  title: string;
+  status: string | null;
+  responsible: string | null;
+  updated_at: string | null;
+  protocol: string | null;
+  login: string | null;
+  password_ref: string | null;
+  observation: string | null;
+  attachments: string[] | null;
+  suggested_documents: string[] | null;
+};
+
+type DbFieldVisit = {
+  id: string;
+  execution_id: string;
+  process_id: string | null;
+  visit_date: string | null;
+  responsible: string | null;
+  location: string | null;
+  coordinates: string | null;
+  notes: string | null;
+  checklist: string | null;
+  status: string | null;
+};
+
+type DbFieldChecklistItem = {
+  id: string;
+  execution_id: string;
+  process_id: string | null;
+  item_key: string | null;
+  title: string;
+  status: string | null;
+  observation: string | null;
+  attachments: string[] | null;
+};
+
+type DbExecutionHistoryItem = {
+  id: string;
+  execution_id: string;
+  process_id: string | null;
+  action_date: string | null;
+  action: string;
+  responsible: string | null;
+  observation: string | null;
+};
+
+type DbExecutionNote = {
+  id: string;
+  execution_id: string;
+  process_id: string | null;
+  notes: string | null;
+};
+
 type FinancialRecord = {
   id: string;
+  contractDbId?: string;
+  proposalDbId?: string;
+  processDbId?: string;
+  clientDbId?: string;
   contractId: string;
   proposalId: string;
   processId: string;
@@ -307,6 +569,33 @@ type FinancialRecord = {
   invoiceNumber: string;
   invoiceStatus: 'Não emitida' | 'Emitida' | 'Cancelada';
   notes: string;
+};
+
+type DbFinancialRecord = {
+  id: string;
+  contract_id: string | null;
+  proposal_id: string | null;
+  process_id: string | null;
+  client_id: string | null;
+  status: 'aguardando_entrada' | 'entrada_confirmada' | 'liberado_execucao' | 'pendente_erro';
+  client_name: string;
+  service_description: string;
+  total_value: number | null;
+  entry_percentage: number | null;
+  entry_value: number | null;
+  remaining_value: number | null;
+  expected_payment_date: string | null;
+  received_amount: number | null;
+  payment_date: string | null;
+  payment_method: string | null;
+  payment_notes: string | null;
+  released_for_execution: boolean | null;
+  released_at: string | null;
+  invoice_number: string | null;
+  invoice_status: 'nao_emitida' | 'emitida' | 'cancelada' | null;
+  contracts?: { contract_number: string; contract_date: string | null } | null;
+  proposals?: { proposal_number: string } | null;
+  processes?: { process_number: string } | null;
 };
 
 type ServiceTracking = {
@@ -347,7 +636,14 @@ type PropertyRecord = {
   processIds: string[];
 };
 
+type DocumentUploadItem = string | File;
+
 type DocumentRecord = {
+  dbId?: string;
+  bucket?: string;
+  storagePath?: string;
+  mimeType?: string;
+  fileSize?: number;
   id: string;
   name: string;
   category: string;
@@ -1052,6 +1348,21 @@ const parseCurrency = (value: string) => {
 const formatCurrencyInput = (value: number) =>
   new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
+const formatDateBR = (value?: string | null) => {
+  if (!value) return '';
+  if (value.includes('/')) return value;
+  const [datePart] = value.split('T');
+  const [year, month, day] = datePart.split('-');
+  return year && month && day ? `${day}/${month}/${year}` : value;
+};
+
+const formatDateToDb = (value: string) => {
+  if (!value) return null;
+  if (value.includes('-')) return value.split('T')[0];
+  const [day, month, year] = value.split('/');
+  return day && month && year ? `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}` : null;
+};
+
 const normalizeText = (value: string) =>
   value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
@@ -1480,7 +1791,560 @@ function downloadDocument(document: DocumentRecord) {
   URL.revokeObjectURL(url);
 }
 
+function mapDbClientToClient(client: DbClient): Client {
+  const statusMap: Record<DbClient['status'], Client['status']> = {
+    novo: 'Novo',
+    em_atendimento: 'Em atendimento',
+    com_processo_ativo: 'Com processo ativo',
+    inativo: 'Inativo'
+  };
+
+  return {
+    id: client.id,
+    type: client.type === 'pessoa_juridica' ? 'Pessoa jurídica' : 'Pessoa física',
+    name: client.name,
+    document: client.document,
+    rgStateRegistration: client.rg_state_registration ?? '',
+    phone: client.phone ?? '',
+    email: client.email ?? '',
+    address: client.address ?? '',
+    city: client.city ?? '',
+    state: client.state ?? '',
+    source: client.source ?? '',
+    owner: client.responsible ?? '',
+    demand: client.demand ?? '',
+    notes: client.notes ?? '',
+    status: statusMap[client.status] ?? 'Novo',
+    properties: 0,
+    processes: 0,
+    pendingDocuments: documentChecklist.length
+  };
+}
+
+function mapClientFormToDbClient(form: ClientFormState) {
+  return {
+    type: form.type === 'Pessoa jurídica' ? 'pessoa_juridica' : 'pessoa_fisica',
+    name: form.name,
+    document: form.document,
+    rg_state_registration: form.rgStateRegistration || null,
+    phone: form.phone || null,
+    email: form.email || null,
+    address: form.address || null,
+    city: form.city || null,
+    state: form.state || null,
+    source: form.source || null,
+    responsible: form.owner || null,
+    demand: form.demand || null,
+    notes: form.notes || null,
+    status: 'novo'
+  };
+}
+
+function mapDbAnalysisToAnalysis(analysis?: DbTechnicalAnalysis | null): TechnicalAnalysis {
+  const statusMap: Record<DbTechnicalAnalysis['status'], TechnicalAnalysis['status']> = {
+    em_analise: 'Em análise',
+    aprovado: 'Aprovado',
+    reprovado: 'Reprovado',
+    necessita_complementacao: 'Necessita complementação'
+  };
+  const resultMap: Record<DbTechnicalAnalysis['result'], TechnicalAnalysis['result']> = {
+    pode_gerar_proposta: 'Pode gerar proposta',
+    precisa_complementar_informacoes: 'Precisa complementar informações',
+    servico_inviavel: 'Serviço inviável'
+  };
+
+  return {
+    status: analysis ? statusMap[analysis.status] : 'Em análise',
+    areaSituation: analysis?.area_situation ?? '',
+    pendingIssues: analysis?.pending_issues ?? '',
+    additionalNeeds: analysis?.additional_needs ?? '',
+    technicalOpinion: analysis?.technical_opinion ?? '',
+    result: analysis ? resultMap[analysis.result] : 'Precisa complementar informações',
+    responsible: analysis?.responsible ?? 'Técnico escritório',
+    analysisDate: formatDateBR(analysis?.analysis_date) || new Date().toLocaleDateString('pt-BR')
+  };
+}
+
+function mapAnalysisToDb(analysis: TechnicalAnalysis) {
+  const statusMap: Record<TechnicalAnalysis['status'], DbTechnicalAnalysis['status']> = {
+    'Em análise': 'em_analise',
+    Aprovado: 'aprovado',
+    Reprovado: 'reprovado',
+    'Necessita complementação': 'necessita_complementacao'
+  };
+  const resultMap: Record<TechnicalAnalysis['result'], DbTechnicalAnalysis['result']> = {
+    'Pode gerar proposta': 'pode_gerar_proposta',
+    'Precisa complementar informações': 'precisa_complementar_informacoes',
+    'Serviço inviável': 'servico_inviavel'
+  };
+
+  return {
+    status: statusMap[analysis.status],
+    result: resultMap[analysis.result],
+    area_situation: analysis.areaSituation || null,
+    pending_issues: analysis.pendingIssues || null,
+    additional_needs: analysis.additionalNeeds || null,
+    technical_opinion: analysis.technicalOpinion || null,
+    responsible: analysis.responsible || null,
+    analysis_date: formatDateToDb(analysis.analysisDate)
+  };
+}
+
+function mapDbProcessToProcess(process: DbProcess): EnvironmentalProcess {
+  const analysis = mapDbAnalysisToAnalysis(process.technical_analyses);
+  const statusByAnalysis: Record<TechnicalAnalysis['status'], string> = {
+    'Em análise': 'Em análise técnica',
+    Aprovado: 'Aguardando proposta',
+    Reprovado: 'Reprovado',
+    'Necessita complementação': 'Necessita complementação'
+  };
+  const priorityMap: Record<DbProcess['priority'], EnvironmentalProcess['priority']> = {
+    normal: 'Normal',
+    alta: 'Alta',
+    urgente: 'Urgente'
+  };
+
+  return {
+    dbId: process.id,
+    clientId: process.client_id,
+    propertyId: process.property_id ?? undefined,
+    id: process.process_number,
+    client: process.clients?.name ?? 'Cliente não vinculado',
+    clientPhone: process.clients?.phone ?? '',
+    property: process.properties?.name ?? 'Propriedade não vinculada',
+    service: process.service,
+    status: statusByAnalysis[analysis.status] ?? process.status,
+    priority: priorityMap[process.priority] ?? 'Normal',
+    owner: process.responsible ?? analysis.responsible,
+    dueDate: formatDateBR(process.due_date),
+    openedAt: formatDateBR(process.opened_at),
+    currentStage: process.current_stage ?? 'Etapa 02 - Análise técnica',
+    demand: process.demand ?? '',
+    analysis,
+    history: ['Processo carregado do Supabase']
+  };
+}
+
+function mapDbPaymentMethod(method: string): PaymentMethod {
+  const methodMap: Record<string, PaymentMethod> = {
+    pix: 'Pix',
+    boleto: 'Boleto',
+    transferencia_bancaria: 'Transferência bancária',
+    'transferência bancária': 'Transferência bancária'
+  };
+  return methodMap[method] ?? 'Pix';
+}
+
+function mapPaymentMethodToDb(method: PaymentMethod) {
+  const methodMap: Record<PaymentMethod, string> = {
+    Pix: 'pix',
+    Boleto: 'boleto',
+    'Transferência bancária': 'transferencia_bancaria'
+  };
+  return methodMap[method];
+}
+
+function mapDbProposalStatus(status: DbProposal['status']): ProposalStatus {
+  const statusMap: Record<DbProposal['status'], ProposalStatus> = {
+    gerar_proposta: 'Gerar proposta',
+    proposta_gerada: 'Proposta gerada',
+    proposta_aprovada: 'Proposta aprovada',
+    proposta_recusada: 'Proposta recusada'
+  };
+  return statusMap[status] ?? 'Proposta gerada';
+}
+
+function mapProposalStatusToDb(status: ProposalStatus): DbProposal['status'] {
+  const statusMap: Record<ProposalStatus, DbProposal['status']> = {
+    'Gerar proposta': 'gerar_proposta',
+    'Proposta gerada': 'proposta_gerada',
+    'Proposta aprovada': 'proposta_aprovada',
+    'Proposta recusada': 'proposta_recusada'
+  };
+  return statusMap[status];
+}
+
+function mapDbProposalToProposal(proposal: DbProposal): Proposal {
+  const services = [...(proposal.proposal_services ?? [])]
+    .sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0))
+    .map((service) => ({
+      description: service.description,
+      value: formatCurrencyInput(Number(service.value ?? 0))
+    }));
+  const totalValue = Number(proposal.total_value ?? services.reduce((total, service) => total + parseCurrency(service.value), 0));
+  const entryValue = Number(proposal.entry_value ?? 0);
+  const remainingValue = Number(proposal.remaining_value ?? Math.max(totalValue - entryValue, 0));
+
+  return {
+    dbId: proposal.id,
+    id: proposal.proposal_number,
+    processId: proposal.processes?.process_number ?? proposal.process_id,
+    client: proposal.client_name,
+    clientPhone: proposal.client_phone ?? '',
+    property: proposal.property_name ?? '',
+    service: services.map((service) => service.description).filter(Boolean).join(' + ') || proposal.processes?.service || 'Serviço ambiental',
+    services,
+    value: formatCurrencyInput(totalValue),
+    deadline: proposal.deadline ?? '',
+    paymentTerms: proposal.payment_terms ?? '',
+    paymentMethods: (proposal.payment_methods ?? []).map(mapDbPaymentMethod),
+    entryPercentage: Number(proposal.entry_percentage ?? 50),
+    entryValue: formatCurrencyInput(entryValue),
+    remainingValue: formatCurrencyInput(remainingValue),
+    validity: proposal.validity ?? '',
+    responsible: proposal.responsible ?? 'Comercial',
+    technicalNotes: proposal.technical_notes ?? '',
+    observations: proposal.observations ?? '',
+    status: mapDbProposalStatus(proposal.status),
+    createdAt: formatDateBR(proposal.proposal_date ?? proposal.generated_at),
+    approvedAt: proposal.approved_at ? formatDateBR(proposal.approved_at) : undefined,
+    contacts: []
+  };
+}
+
+function mapDbContractStatus(status: DbContract['status']): ContractStatus {
+  const statusMap: Record<DbContract['status'], ContractStatus> = {
+    aguardando_contrato: 'Aguardando contrato',
+    contrato_gerado: 'Contrato gerado',
+    vigente: 'Vigente',
+    cancelado: 'Cancelado'
+  };
+  return statusMap[status] ?? 'Contrato gerado';
+}
+
+function mapContractStatusToDb(status: ContractStatus): DbContract['status'] {
+  const statusMap: Record<ContractStatus, DbContract['status']> = {
+    'Aguardando contrato': 'aguardando_contrato',
+    'Contrato gerado': 'contrato_gerado',
+    Vigente: 'vigente',
+    Cancelado: 'cancelado'
+  };
+  return statusMap[status];
+}
+
+function mapDbContractToContract(contract: DbContract): ContractRecord {
+  const totalValue = Number(contract.total_value ?? 0);
+  const entryValue = Number(contract.entry_value ?? totalValue / 2);
+  const remainingValue = Number(contract.remaining_value ?? Math.max(totalValue - entryValue, 0));
+
+  return {
+    dbId: contract.id,
+    proposalDbId: contract.proposal_id,
+    processDbId: contract.process_id,
+    clientDbId: contract.client_id,
+    propertyDbId: contract.property_id ?? undefined,
+    id: contract.contract_number,
+    proposalId: contract.proposals?.proposal_number ?? contract.proposal_id,
+    processId: contract.processes?.process_number ?? contract.process_id,
+    client: contract.client_name,
+    property: contract.property_name ?? '',
+    phone: contract.client_phone ?? '',
+    city: [contract.client_city, contract.client_state].filter(Boolean).join('/'),
+    service: contract.service_description,
+    value: formatCurrencyInput(totalValue),
+    paymentTerms: contract.payment_terms ?? '',
+    deadline: contract.execution_deadline ?? '',
+    responsible: 'Jurídico',
+    status: mapDbContractStatus(contract.status),
+    contractDate: formatDateBR(contract.contract_date),
+    approvalDate: formatDateBR(contract.proposals?.approved_at) || formatDateBR(contract.generated_at),
+    expirationDate: formatDateBR(contract.expiration_date),
+    contractorDocument: contract.client_document ?? '',
+    contractorAddress: contract.client_address ?? contract.property_name ?? '',
+    contractorCity: contract.client_city ?? '',
+    contractorState: contract.client_state ?? '',
+    contractedCompany: contract.company_name ?? defaultContractedCompany.name,
+    contractedCnpj: contract.company_cnpj ?? defaultContractedCompany.cnpj,
+    contractedAddress: contract.company_address ?? defaultContractedCompany.address,
+    contractedPhone: contract.company_phone ?? defaultContractedCompany.phone,
+    objectClause: `O presente contrato tem por objeto a prestação de serviços técnicos especializados de ${contract.service_description}, a serem executados pela CONTRATADA em área indicada pela CONTRATANTE, referente à propriedade ${contract.property_name ?? 'não informada'}, vinculada ao processo ${contract.processes?.process_number ?? contract.process_id} e à proposta comercial ${contract.proposals?.proposal_number ?? contract.proposal_id}.`,
+    contractedObligations: 'São obrigações da CONTRATADA executar os serviços contratados com observância das normas técnicas aplicáveis, disponibilizar equipe técnica, ferramentas e materiais necessários à execução dos serviços, entregar os serviços dentro dos padrões técnicos exigidos e informar à CONTRATANTE qualquer fato que possa comprometer o andamento dos trabalhos.',
+    contractorObligations: 'São obrigações da CONTRATANTE disponibilizar acesso à área objeto dos serviços, fornecer informações e documentos necessários à execução dos trabalhos, prestar esclarecimentos quando solicitado e efetuar os pagamentos nos prazos estabelecidos neste contrato.',
+    paymentClause: `Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${formatCurrency(totalValue)}, sendo 50% na assinatura deste contrato (${formatCurrency(entryValue)}) e 50% na conclusão dos serviços (${formatCurrency(remainingValue)}), salvo condição diversa expressamente ajustada entre as partes.`,
+    deadlineClause: `O prazo para execução dos serviços será de ${contract.execution_deadline ?? 'acordo entre as partes'}, ou conforme disponibilidade de acesso à área, entrega integral dos documentos necessários e condições técnicas adequadas à realização dos trabalhos.`,
+    terminationClause: 'O presente contrato poderá ser rescindido por qualquer das partes em caso de descumprimento de quaisquer cláusulas aqui estabelecidas, mediante comunicação formal, preservando-se os valores proporcionais aos serviços já executados.',
+    jurisdictionClause: 'Fica eleito o foro da comarca de Goiânia/GO para dirimir quaisquer controvérsias oriundas deste contrato, com renúncia expressa a qualquer outro, por mais privilegiado que seja.',
+    observations: '',
+    signedFileName: contract.signed_file_name ?? '',
+    generatedAt: formatDateBR(contract.generated_at),
+    activatedAt: formatDateBR(contract.activated_at)
+  };
+}
+
+function mapContractToDb(contract: ContractRecord, proposal?: Proposal) {
+  const totalValue = parseCurrency(contract.value);
+  const entryPercentage = proposal?.entryPercentage ?? 50;
+  const entryValue = totalValue * (entryPercentage / 100);
+
+  return {
+    contract_number: contract.id,
+    proposal_id: contract.proposalDbId ?? proposal?.dbId,
+    process_id: contract.processDbId,
+    client_id: contract.clientDbId,
+    property_id: contract.propertyDbId ?? null,
+    status: mapContractStatusToDb(contract.status),
+    client_name: contract.client,
+    client_document: contract.contractorDocument || null,
+    client_address: contract.contractorAddress || null,
+    client_city: contract.contractorCity || null,
+    client_state: contract.contractorState || null,
+    client_phone: contract.phone || null,
+    property_name: contract.property || null,
+    service_description: contract.service,
+    total_value: totalValue,
+    entry_percentage: entryPercentage,
+    entry_value: entryValue,
+    remaining_value: Math.max(totalValue - entryValue, 0),
+    payment_terms: contract.paymentTerms || contract.paymentClause || null,
+    execution_deadline: contract.deadline || null,
+    contract_date: formatDateToDb(contract.contractDate),
+    expiration_date: formatDateToDb(contract.expirationDate),
+    company_name: contract.contractedCompany,
+    company_cnpj: contract.contractedCnpj,
+    company_address: contract.contractedAddress,
+    company_phone: contract.contractedPhone || null,
+    signed_file_name: contract.signedFileName || null
+  };
+}
+
+
+function mapExecutionTaskStatusToDb(status: ExecutionTaskStatus) {
+  const statusMap: Record<ExecutionTaskStatus, string> = {
+    'Não iniciado': 'nao_iniciado',
+    'Em andamento': 'em_andamento',
+    'Aguardando aprovação': 'aguardando_aprovacao',
+    Aprovado: 'aprovado',
+    Concluído: 'concluido',
+    'Pendente documentação': 'pendente_documentacao',
+    Rejeitado: 'rejeitado',
+    'Cliente já possui': 'cliente_ja_possui',
+    'Não se aplica': 'nao_se_aplica'
+  };
+  return statusMap[status];
+}
+
+function mapDbExecutionTaskStatus(status: string | null): ExecutionTaskStatus {
+  const statusMap: Record<string, ExecutionTaskStatus> = {
+    nao_iniciado: 'Não iniciado',
+    em_andamento: 'Em andamento',
+    aguardando_aprovacao: 'Aguardando aprovação',
+    aprovado: 'Aprovado',
+    concluido: 'Concluído',
+    pendente_documentacao: 'Pendente documentação',
+    rejeitado: 'Rejeitado',
+    cliente_ja_possui: 'Cliente já possui',
+    nao_se_aplica: 'Não se aplica'
+  };
+  return status ? statusMap[status] ?? 'Não iniciado' : 'Não iniciado';
+}
+
+function mapFieldChecklistStatusToDb(status: FieldChecklistItem['status']) {
+  const statusMap: Record<FieldChecklistItem['status'], string> = {
+    'Não iniciado': 'nao_iniciado',
+    'Em andamento': 'em_andamento',
+    Concluído: 'concluido',
+    Pendente: 'pendente'
+  };
+  return statusMap[status];
+}
+
+function mapDbFieldChecklistStatus(status: string | null): FieldChecklistItem['status'] {
+  const statusMap: Record<string, FieldChecklistItem['status']> = {
+    nao_iniciado: 'Não iniciado',
+    em_andamento: 'Em andamento',
+    concluido: 'Concluído',
+    pendente: 'Pendente'
+  };
+  return status ? statusMap[status] ?? 'Não iniciado' : 'Não iniciado';
+}
+
+function mapOfficeActionStatusToDb(status: OfficeAction['status']) {
+  const statusMap: Record<OfficeAction['status'], string> = {
+    Pendente: 'pendente',
+    'Em andamento': 'em_andamento',
+    Concluído: 'concluido'
+  };
+  return statusMap[status];
+}
+
+function mapFieldVisitStatusToDb(status: FieldVisit['status']) {
+  const statusMap: Record<FieldVisit['status'], string> = {
+    Agendada: 'agendada',
+    Realizada: 'realizada',
+    Pendente: 'pendente'
+  };
+  return statusMap[status];
+}
+
+function mapDbFieldVisitStatus(status: string | null): FieldVisit['status'] {
+  const statusMap: Record<string, FieldVisit['status']> = { agendada: 'Agendada', realizada: 'Realizada', pendente: 'Pendente' };
+  return status ? statusMap[status] ?? 'Agendada' : 'Agendada';
+}
+
+function mapDbDocumentToDocument(document: DbDocument, processes: EnvironmentalProcess[]): DocumentRecord {
+  const linkedProcess = processes.find((process) => process.dbId === document.process_id || process.id === document.processes?.process_number);
+  return {
+    dbId: document.id,
+    bucket: document.bucket_name ?? undefined,
+    storagePath: document.storage_path ?? undefined,
+    mimeType: document.mime_type ?? undefined,
+    fileSize: document.file_size ?? undefined,
+    id: document.id,
+    name: document.name ?? document.category,
+    category: document.category,
+    client: document.clients?.name ?? linkedProcess?.client ?? '',
+    propertyId: document.property_id ?? linkedProcess?.propertyId ?? '',
+    propertyName: document.properties?.name ?? linkedProcess?.property ?? '',
+    processId: document.processes?.process_number ?? linkedProcess?.id ?? document.process_id ?? '',
+    uploadedAt: formatDateBR(document.uploaded_at),
+    uploadedBy: document.uploaded_by ?? 'Sistema',
+    fileName: document.file_name
+  };
+}
+
+function mapDbExecutionToExecutionRecord(execution: DbExecution, process: EnvironmentalProcess | undefined): ExecutionRecord {
+  const defaultRecord = createDefaultExecutionRecord(process?.id ?? execution.process_id);
+  const taskRows = execution.execution_tasks ?? [];
+  const checklistRows = execution.field_checklist_items ?? [];
+  const tasks = createDefaultExecutionTasks().map((template) => {
+    const row = taskRows.find((item) => item.task_key === template.id || item.title === template.title);
+    return row ? {
+      id: row.task_key ?? template.id,
+      title: row.title ?? template.title,
+      status: mapDbExecutionTaskStatus(row.status),
+      responsible: row.responsible ?? '',
+      updatedAt: formatDateBR(row.updated_at),
+      protocol: row.protocol ?? '',
+      login: row.login ?? '',
+      password: row.password_ref ?? '',
+      observation: row.observation ?? '',
+      attachments: row.attachments ?? [],
+      suggestedDocuments: row.suggested_documents ?? template.suggestedDocuments
+    } : template;
+  });
+
+  const fieldChecklist = defaultFieldChecklist.map((template) => {
+    const row = checklistRows.find((item) => item.item_key === template.id || item.title === template.title);
+    return row ? {
+      dbId: row.id,
+      id: row.item_key ?? template.id,
+      title: row.title ?? template.title,
+      status: mapDbFieldChecklistStatus(row.status),
+      observation: row.observation ?? '',
+      attachments: row.attachments ?? []
+    } : template;
+  });
+
+  return {
+    ...defaultRecord,
+    dbId: execution.id,
+    processDbId: execution.process_id,
+    processId: process?.id ?? execution.process_id,
+    tasks,
+    fieldChecklist,
+    officeActions: [],
+    fieldVisits: (execution.field_visits ?? []).map((visit) => ({
+      id: visit.id,
+      date: formatDateBR(visit.visit_date),
+      responsible: visit.responsible ?? '',
+      location: visit.location ?? '',
+      coordinates: visit.coordinates ?? '',
+      notes: visit.notes ?? '',
+      checklist: visit.checklist ?? '',
+      status: mapDbFieldVisitStatus(visit.status)
+    })),
+    history: (execution.execution_history ?? []).map((item) => ({
+      id: item.id,
+      date: formatDateBR(item.action_date),
+      action: item.action,
+      responsible: item.responsible ?? 'Sistema',
+      observation: item.observation ?? ''
+    })),
+    internalNotes: execution.execution_notes?.[0]?.notes ?? defaultRecord.internalNotes
+  };
+}
+
+function getUploadFileName(item: DocumentUploadItem) {
+  return typeof item === 'string' ? item : item.name;
+}
+
+function chooseDocumentBucket(category: string) {
+  const normalized = normalizeText(category);
+  if (normalized.includes('protocolo') || normalized.includes('anexos') || normalized.includes('certificado') || normalized.includes('relatorio')) return 'execution-files';
+  return 'process-documents';
+}
+
+function mapDbFinancialStatus(status: DbFinancialRecord['status'], released: boolean | null): FinancialRecord['financialStatus'] {
+  if (released || status === 'liberado_execucao') return 'Liberado para execução';
+  const statusMap: Record<DbFinancialRecord['status'], FinancialRecord['financialStatus']> = {
+    aguardando_entrada: 'Aguardando entrada',
+    entrada_confirmada: 'Entrada confirmada',
+    liberado_execucao: 'Liberado para execução',
+    pendente_erro: 'Pendente/erro'
+  };
+  return statusMap[status] ?? 'Aguardando entrada';
+}
+
+function mapFinancialStatusToDb(status: FinancialRecord['financialStatus']) {
+  const statusMap: Record<FinancialRecord['financialStatus'], DbFinancialRecord['status']> = {
+    'Aguardando entrada': 'aguardando_entrada',
+    'Entrada confirmada': 'entrada_confirmada',
+    'Liberado para execução': 'liberado_execucao',
+    'Pendente/erro': 'pendente_erro'
+  };
+  return statusMap[status];
+}
+
+function mapDbPaymentStatus(status: DbFinancialRecord['status']): FinancialRecord['paymentStatus'] {
+  if (status === 'liberado_execucao' || status === 'entrada_confirmada') return 'Parcial';
+  if (status === 'pendente_erro') return 'Vencido';
+  return 'Aberto';
+}
+
+function mapInvoiceStatusFromDb(status: DbFinancialRecord['invoice_status']): FinancialRecord['invoiceStatus'] {
+  const statusMap: Record<NonNullable<DbFinancialRecord['invoice_status']>, FinancialRecord['invoiceStatus']> = {
+    nao_emitida: 'Não emitida',
+    emitida: 'Emitida',
+    cancelada: 'Cancelada'
+  };
+  return status ? statusMap[status] : 'Não emitida';
+}
+
+function mapDbFinancialRecordToFinancialRecord(record: DbFinancialRecord): FinancialRecord {
+  return {
+    id: record.id,
+    contractDbId: record.contract_id ?? undefined,
+    proposalDbId: record.proposal_id ?? undefined,
+    processDbId: record.process_id ?? undefined,
+    clientDbId: record.client_id ?? undefined,
+    contractId: record.contracts?.contract_number ?? record.contract_id ?? 'Contrato não informado',
+    proposalId: record.proposals?.proposal_number ?? record.proposal_id ?? 'Proposta não informada',
+    processId: record.processes?.process_number ?? record.process_id ?? '',
+    client: record.client_name,
+    service: record.service_description,
+    amount: Number(record.total_value ?? 0),
+    entryPercentage: Number(record.entry_percentage ?? 50),
+    entryAmount: Number(record.entry_value ?? 0),
+    remainingAmount: Number(record.remaining_value ?? 0),
+    dueDate: formatDateBR(record.expected_payment_date),
+    paymentStatus: mapDbPaymentStatus(record.status),
+    financialStatus: mapDbFinancialStatus(record.status, record.released_for_execution),
+    receivedAmount: Number(record.received_amount ?? 0),
+    paymentMethod: record.payment_method ?? '',
+    paidAt: formatDateBR(record.payment_date),
+    releasedAt: formatDateBR(record.released_at),
+    invoiceNumber: record.invoice_number ?? '',
+    invoiceStatus: mapInvoiceStatusFromDb(record.invoice_status),
+    notes: record.payment_notes ?? ''
+  };
+}
+
 export function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginSubmitting, setLoginSubmitting] = useState(false);
+  const [loginForm, setLoginForm] = useState<LoginFormState>({ email: '', password: '' });
+  const [loginError, setLoginError] = useState('');
   const [data, setData] = useState<ApiPayload>(fallbackData);
   const [apiStatus, setApiStatus] = useState<'online' | 'offline'>('offline');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1507,6 +2371,26 @@ export function App() {
   const [documents, setDocuments] = useState<DocumentRecord[]>(initialDocuments);
 
   useEffect(() => {
+    let isMounted = true;
+
+    supabase.auth.getSession().then(({ data: sessionData }) => {
+      if (!isMounted) return;
+      setIsAuthenticated(Boolean(sessionData.session));
+      setAuthLoading(false);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(Boolean(session));
+      setAuthLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
     fetch('/api/dashboard/summary')
       .then((response) => response.json())
       .then((payload: ApiPayload) => {
@@ -1518,6 +2402,101 @@ export function App() {
         setApiStatus('offline');
       });
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let isMounted = true;
+
+    supabase
+      .from('clients')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data: dbClients, error }) => {
+        if (!isMounted || error || !dbClients || dbClients.length === 0) return;
+        setClients(dbClients.map((client) => mapDbClientToClient(client as DbClient)));
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let isMounted = true;
+
+    supabase
+      .from('processes')
+      .select('*, clients(*), properties(*), technical_analyses(*)')
+      .order('created_at', { ascending: false })
+      .then(({ data: dbProcesses, error }) => {
+        if (!isMounted || error || !dbProcesses || dbProcesses.length === 0) return;
+        setProcesses(dbProcesses.map((process) => mapDbProcessToProcess(process as DbProcess)));
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let isMounted = true;
+
+    supabase
+      .from('proposals')
+      .select('*, proposal_services(*), processes(process_number, service)')
+      .order('created_at', { ascending: false })
+      .then(({ data: dbProposals, error }) => {
+        if (!isMounted || error || !dbProposals || dbProposals.length === 0) return;
+        setProposals(dbProposals.map((proposal) => mapDbProposalToProposal(proposal as DbProposal)));
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let isMounted = true;
+
+    supabase
+      .from('contracts')
+      .select('*, proposals(proposal_number, approved_at), processes(process_number)')
+      .order('created_at', { ascending: false })
+      .then(({ data: dbContracts, error }) => {
+        if (!isMounted || error || !dbContracts || dbContracts.length === 0) return;
+        setContracts(dbContracts.map((contract) => mapDbContractToContract(contract as DbContract)));
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let isMounted = true;
+
+    supabase
+      .from('financial_records')
+      .select('*, contracts(contract_number, contract_date), proposals(proposal_number), processes(process_number)')
+      .order('created_at', { ascending: false })
+      .then(({ data: dbFinancialRecords, error }) => {
+        if (!isMounted || error) return;
+        setFinancialRecords((dbFinancialRecords ?? []).map((record) => mapDbFinancialRecordToFinancialRecord(record as DbFinancialRecord)));
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated]);
 
   const cards = useMemo(
     () => [
@@ -1544,6 +2523,44 @@ export function App() {
     setMenuOpen(false);
   }
 
+  function updateLoginField<K extends keyof LoginFormState>(field: K, value: LoginFormState[K]) {
+    setLoginForm((current) => ({ ...current, [field]: value }));
+    setLoginError('');
+  }
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!loginForm.email.trim() || !loginForm.password.trim()) {
+      setLoginError('Informe e-mail e senha para acessar o sistema.');
+      return;
+    }
+
+    setLoginSubmitting(true);
+    setLoginError('');
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginForm.email.trim(),
+      password: loginForm.password
+    });
+
+    setLoginSubmitting(false);
+
+    if (error) {
+      setLoginError('E-mail ou senha inválidos. Confira os dados e tente novamente.');
+      return;
+    }
+
+    setIsAuthenticated(true);
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setIsAuthenticated(false);
+    setLoginForm({ email: '', password: '' });
+    setActiveView('Dashboard');
+    setMenuOpen(false);
+  }
+
   function updateClientField<K extends keyof ClientFormState>(field: K, value: ClientFormState[K]) {
     setClientForm((current) => ({ ...current, [field]: value }));
   }
@@ -1565,10 +2582,102 @@ export function App() {
     setIsUserFormOpen(false);
   }
 
-  function handleClientSubmit(event: FormEvent<HTMLFormElement>, initialDocuments: DocumentAttachmentMap = {}) {
+  async function handleClientSubmit(event: FormEvent<HTMLFormElement>, initialDocuments: DocumentAttachmentMap = {}) {
     event.preventDefault();
     const attachedCategories = Object.values(initialDocuments).filter((files) => files.length > 0).length;
-    const nextClient: Client = {
+    const today = new Date();
+    const openedAt = today.toISOString().split('T')[0];
+    const dueDate = new Date(today);
+    dueDate.setDate(dueDate.getDate() + 15);
+    const dueDateDb = dueDate.toISOString().split('T')[0];
+
+    const { data: insertedClient, error: insertError } = await supabase
+      .from('clients')
+      .insert(mapClientFormToDbClient(clientForm))
+      .select('*')
+      .single();
+
+    let insertedProperty: DbProperty | null = null;
+    let insertedProcess: DbProcess | null = null;
+    let insertedAnalysis: DbTechnicalAnalysis | null = null;
+
+    if (insertedClient && !insertError) {
+      const { data: propertyData, error: propertyError } = await supabase
+        .from('properties')
+        .insert({
+          client_id: insertedClient.id,
+          name: clientForm.address ? `Propriedade inicial - ${clientForm.name}` : 'Propriedade inicial',
+          type: 'Rural',
+          city: clientForm.city || null,
+          state: clientForm.state || null,
+          address: clientForm.address || null,
+          environmental_notes: clientForm.notes || null
+        })
+        .select('*')
+        .single();
+
+      if (!propertyError && propertyData) {
+        insertedProperty = propertyData as DbProperty;
+      }
+
+      const { data: processData, error: processError } = await supabase
+        .from('processes')
+        .insert({
+          client_id: insertedClient.id,
+          property_id: insertedProperty?.id ?? null,
+          service: clientForm.demand || 'Análise técnica inicial',
+          demand: clientForm.demand || 'Demanda inicial cadastrada pelo comercial.',
+          status: 'liberado_execucao',
+          priority: 'normal',
+          responsible: clientForm.owner || 'Técnico escritório',
+          opened_at: openedAt,
+          due_date: dueDateDb,
+          current_stage: 'Etapa 02 - Análise técnica',
+          notes: clientForm.notes || null
+        })
+        .select('*, clients(*), properties(*), technical_analyses(*)')
+        .single();
+
+      if (!processError && processData) {
+        insertedProcess = processData as DbProcess;
+        await supabase
+          .from('clients')
+          .update({ status: 'com_processo_ativo' })
+          .eq('id', insertedClient.id);
+
+        const { data: analysisData, error: analysisError } = await supabase
+          .from('technical_analyses')
+          .upsert({
+            process_id: insertedProcess.id,
+            status: 'em_analise',
+            result: 'precisa_complementar_informacoes',
+            area_situation: '',
+            pending_issues: '',
+            additional_needs: '',
+            technical_opinion: '',
+            responsible: clientForm.owner || 'Técnico escritório',
+            analysis_date: openedAt
+          }, { onConflict: 'process_id' })
+          .select('*')
+          .single();
+
+        if (!analysisError && analysisData) {
+          insertedAnalysis = analysisData as DbTechnicalAnalysis;
+          insertedProcess = {
+            ...insertedProcess,
+            technical_analyses: insertedAnalysis
+          };
+        }
+      }
+    }
+
+    const nextClient: Client = insertedClient && !insertError ? {
+      ...mapDbClientToClient(insertedClient as DbClient),
+      status: insertedProcess ? 'Com processo ativo' : 'Novo',
+      properties: insertedProperty ? 1 : 0,
+      processes: insertedProcess ? 1 : 0,
+      pendingDocuments: Math.max(documentChecklist.length - attachedCategories, 0)
+    } : {
       ...clientForm,
       id: 'CLI-' + String(clients.length + 1).padStart(3, '0'),
       status: 'Novo',
@@ -1576,19 +2685,25 @@ export function App() {
       processes: 0,
       pendingDocuments: Math.max(documentChecklist.length - attachedCategories, 0)
     };
+
     const newDocuments = Object.entries(initialDocuments).flatMap(([category, fileNames]) => fileNames.map((fileName) => ({ category, fileName })))
       .map(({ category, fileName }, index) => ({
         id: 'DOC-' + String(documents.length + index + 1).padStart(3, '0'),
         name: category,
         category,
         client: nextClient.name,
-        propertyId: '',
-        propertyName: 'Cadastro do cliente',
-        processId: '',
+        propertyId: insertedProperty?.id ?? '',
+        propertyName: insertedProperty?.name ?? 'Cadastro do cliente',
+        processId: insertedProcess?.process_number ?? '',
         uploadedAt: new Date().toLocaleDateString('pt-BR'),
         uploadedBy: 'Comercial',
         fileName
       }));
+
+    if (insertedProcess) {
+      setProcesses((current) => [mapDbProcessToProcess(insertedProcess as DbProcess), ...current]);
+    }
+
     setClients((current) => [nextClient, ...current]);
     if (newDocuments.length > 0) {
       setDocuments((current) => [...newDocuments, ...current]);
@@ -1597,59 +2712,170 @@ export function App() {
     setIsClientFormOpen(false);
   }
 
-  function updateClient(clientId: string, updates: ClientFormState) {
-    setClients((current) => current.map((client) => (client.id === clientId ? { ...client, ...updates } : client)));
+  async function updateClient(clientId: string, updates: ClientFormState) {
+    const { data: updatedClient, error: updateError } = await supabase
+      .from('clients')
+      .update(mapClientFormToDbClient(updates))
+      .eq('id', clientId)
+      .select('*')
+      .single();
+
+    setClients((current) => current.map((client) => {
+      if (client.id !== clientId) return client;
+      return updatedClient && !updateError ? mapDbClientToClient(updatedClient as DbClient) : { ...client, ...updates };
+    }));
   }
 
-  function attachClientDocuments(client: Client, fileNames: string[], category: string) {
-    if (fileNames.length === 0) return;
+  async function attachClientDocuments(client: Client, fileItems: DocumentUploadItem[], category: string) {
+    if (fileItems.length === 0) return;
     const relatedProcess = processes.find((process) => process.client === client.name);
-    const newDocuments = fileNames.map((fileName, index) => ({
+    const newDocuments = fileItems.map((item, index) => ({
       id: 'DOC-' + String(documents.length + index + 1).padStart(3, '0'),
       name: category,
       category,
       client: client.name,
-      propertyId: '',
+      propertyId: relatedProcess?.propertyId ?? '',
       propertyName: relatedProcess?.property ?? 'Cadastro do cliente',
       processId: relatedProcess?.id ?? '',
       uploadedAt: new Date().toLocaleDateString('pt-BR'),
       uploadedBy: 'Comercial',
-      fileName
+      fileName: getUploadFileName(item)
     }));
     setDocuments((current) => [...newDocuments, ...current]);
+
+    for (const item of fileItems) {
+      if (typeof item === 'string') continue;
+      const bucket = 'client-documents';
+      const storagePath = `clients/${client.id}/${Date.now()}-${item.name}`;
+      await supabase.storage.from(bucket).upload(storagePath, item, { upsert: true });
+      await supabase.from('documents').insert({
+        client_id: client.id,
+        property_id: relatedProcess?.propertyId ?? null,
+        process_id: relatedProcess?.dbId ?? null,
+        category,
+        name: category,
+        file_name: item.name,
+        bucket_name: bucket,
+        storage_path: storagePath,
+        mime_type: item.type || null,
+        file_size: item.size,
+        uploaded_by: 'Comercial'
+      });
+    }
   }
 
-  function attachProcessDocuments(process: EnvironmentalProcess, fileNames: string[], category: string) {
-    if (fileNames.length === 0) return;
-    const newDocuments = fileNames.map((fileName, index) => ({
-      id: 'DOC-' + String(documents.length + index + 1).padStart(3, '0'),
-      name: category,
-      category,
-      client: process.client,
-      propertyId: '',
-      propertyName: process.property,
-      processId: process.id,
-      uploadedAt: new Date().toLocaleDateString('pt-BR'),
-      uploadedBy: 'Técnico escritório',
-      fileName
-    }));
-    setDocuments((current) => [...newDocuments, ...current]);
+  async function attachProcessDocuments(process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) {
+    if (fileItems.length === 0) return;
+    const bucket = chooseDocumentBucket(category);
+    const newDocuments: DocumentRecord[] = [];
+
+    for (const [index, item] of fileItems.entries()) {
+      const fileName = getUploadFileName(item);
+      let storagePath = '';
+      let dbId = '';
+      let mimeType = '';
+      let fileSize = 0;
+
+      if (typeof item !== 'string' && process.dbId) {
+        storagePath = `processes/${process.dbId}/${normalizeText(category).replace(/\s+/g, '-')}/${Date.now()}-${item.name}`;
+        const { error: uploadError } = await supabase.storage.from(bucket).upload(storagePath, item, { upsert: true });
+        if (uploadError) {
+          window.alert('Não foi possível enviar o arquivo para o Supabase Storage. Tente novamente.');
+          continue;
+        }
+        mimeType = item.type;
+        fileSize = item.size;
+      }
+
+      if (process.dbId) {
+        const { data: insertedDocument, error: documentError } = await supabase
+          .from('documents')
+          .insert({
+            client_id: process.clientId ?? null,
+            property_id: process.propertyId ?? null,
+            process_id: process.dbId,
+            category,
+            name: category,
+            file_name: fileName,
+            bucket_name: storagePath ? bucket : null,
+            storage_path: storagePath || null,
+            mime_type: mimeType || null,
+            file_size: fileSize || null,
+            uploaded_by: 'Técnico escritório'
+          })
+          .select('*')
+          .single();
+
+        if (!documentError && insertedDocument) {
+          dbId = (insertedDocument as DbDocument).id;
+        }
+      }
+
+      newDocuments.push({
+        dbId: dbId || undefined,
+        bucket: storagePath ? bucket : undefined,
+        storagePath: storagePath || undefined,
+        mimeType: mimeType || undefined,
+        fileSize: fileSize || undefined,
+        id: dbId || 'DOC-' + String(documents.length + index + 1).padStart(3, '0'),
+        name: category,
+        category,
+        client: process.client,
+        propertyId: process.propertyId ?? '',
+        propertyName: process.property,
+        processId: process.id,
+        uploadedAt: new Date().toLocaleDateString('pt-BR'),
+        uploadedBy: 'Técnico escritório',
+        fileName
+      });
+    }
+
+    if (newDocuments.length > 0) setDocuments((current) => [...newDocuments, ...current]);
   }
 
-  function deleteDocument(documentId: string) {
+  async function deleteDocument(documentId: string) {
     const shouldDelete = window.confirm('Deseja excluir este documento?');
     if (!shouldDelete) return false;
+    const selectedDocument = documents.find((document) => document.id === documentId);
+
+    if (selectedDocument?.storagePath && selectedDocument.bucket) {
+      await supabase.storage.from(selectedDocument.bucket).remove([selectedDocument.storagePath]);
+    }
+
+    if (selectedDocument?.dbId) {
+      await supabase.from('documents').delete().eq('id', selectedDocument.dbId);
+    }
+
     setDocuments((current) => current.filter((document) => document.id !== documentId));
     return true;
   }
 
-  function updateProcessAnalysis(processId: string, analysis: TechnicalAnalysis) {
+  async function updateProcessAnalysis(processId: string, analysis: TechnicalAnalysis) {
+    const selectedProcess = processes.find((process) => process.id === processId);
+    if (selectedProcess?.dbId) {
+      const nextStage = analysis.status === 'Aprovado' ? 'Etapa 03 - Proposta comercial' : 'Etapa 02 - Análise técnica';
+
+      await supabase
+        .from('technical_analyses')
+        .upsert({ process_id: selectedProcess.dbId, ...mapAnalysisToDb(analysis) }, { onConflict: 'process_id' });
+
+      await supabase
+        .from('processes')
+        .update({
+          current_stage: nextStage,
+          responsible: analysis.responsible || selectedProcess.owner
+        })
+        .eq('id', selectedProcess.dbId);
+    }
+
     setProcesses((current) =>
       current.map((process) =>
         process.id === processId
           ? {
               ...process,
               status: analysis.status === 'Aprovado' ? 'Aguardando proposta' : analysis.status,
+              currentStage: analysis.status === 'Aprovado' ? 'Etapa 03 - Proposta comercial' : 'Etapa 02 - Análise técnica',
+              owner: analysis.responsible || process.owner,
               analysis,
               history: [...process.history, 'Parecer técnico atualizado em ' + analysis.analysisDate]
             }
@@ -1673,7 +2899,7 @@ export function App() {
     setProposalForm((current) => ({ ...current, [field]: value }));
   }
 
-  function handleProposalSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleProposalSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const process = processes.find((item) => item.id === selectedProposalProcessId);
     if (!process) return;
@@ -1705,15 +2931,93 @@ export function App() {
       contacts: []
     };
 
+    if (process.dbId && process.clientId) {
+      const { data: insertedProposal, error: proposalError } = await supabase
+        .from('proposals')
+        .insert({
+          proposal_number: proposal.id,
+          process_id: process.dbId,
+          client_id: process.clientId,
+          property_id: process.propertyId ?? null,
+          status: mapProposalStatusToDb(proposal.status),
+          client_name: proposal.client,
+          client_phone: proposal.clientPhone || null,
+          property_name: proposal.property || null,
+          city_state: proposalForm.cityState || null,
+          responsible: proposal.responsible || null,
+          proposal_date: formatDateToDb(proposal.createdAt),
+          total_value: totalValue,
+          entry_percentage: proposal.entryPercentage,
+          entry_value: entryValue,
+          remaining_value: remainingValue,
+          payment_methods: proposal.paymentMethods.map(mapPaymentMethodToDb),
+          payment_terms: proposal.paymentTerms || null,
+          deadline: proposal.deadline || null,
+          validity: proposal.validity || null,
+          technical_notes: proposal.technicalNotes || null,
+          observations: proposal.observations || null
+        })
+        .select('*')
+        .single();
+
+      if (!proposalError && insertedProposal) {
+        const servicePayload = proposal.services.map((service, index) => ({
+          proposal_id: insertedProposal.id,
+          description: service.description,
+          value: parseCurrency(service.value),
+          sort_order: index + 1
+        }));
+
+        if (servicePayload.length > 0) {
+          await supabase.from('proposal_services').insert(servicePayload);
+        }
+
+        await supabase
+          .from('processes')
+          .update({
+            current_stage: 'Etapa 03 - Proposta comercial',
+            responsible: proposal.responsible || process.owner
+          })
+          .eq('id', process.dbId);
+
+        proposal.dbId = insertedProposal.id;
+      }
+    }
+
     setProposals((current) => [proposal, ...current]);
     openProposalPdf(proposal, true);
     closeProposalForm();
   }
 
-  function approveProposal(proposalId: string) {
+  async function approveProposal(proposalId: string) {
     const shouldApprove = window.confirm('Deseja aprovar esta proposta?');
     if (!shouldApprove) return;
     const approvalDate = new Date().toLocaleDateString('pt-BR');
+    const proposalToApprove = proposals.find((proposal) => proposal.id === proposalId);
+
+    if (proposalToApprove?.dbId) {
+      await supabase
+        .from('proposals')
+        .update({
+          status: 'proposta_aprovada',
+          approved_at: new Date().toISOString()
+        })
+        .eq('id', proposalToApprove.dbId);
+
+      await supabase
+        .from('commercial_followups')
+        .insert({
+          proposal_id: proposalToApprove.dbId,
+          process_id: processes.find((process) => process.id === proposalToApprove.processId)?.dbId ?? null,
+          client_id: processes.find((process) => process.id === proposalToApprove.processId)?.clientId ?? null,
+          contact_date: new Date().toISOString().split('T')[0],
+          channel: 'whatsapp',
+          note: 'Proposta aprovada pelo comercial após retorno do cliente.',
+          next_action: 'Encaminhar para elaboração do contrato.',
+          responsible: proposalToApprove.responsible || 'Comercial'
+        });
+    }
+
     setProposals((current) =>
       current.map((proposal) =>
         proposal.id === proposalId
@@ -1737,19 +3041,121 @@ export function App() {
     );
   }
 
-  function saveContract(contract: ContractRecord) {
+  async function saveContract(contract: ContractRecord) {
+    const linkedProposal = proposals.find((proposal) => proposal.id === contract.proposalId);
+    const linkedProcess = processes.find((process) => process.id === contract.processId);
+    const contractWithRelations: ContractRecord = {
+      ...contract,
+      proposalDbId: contract.proposalDbId ?? linkedProposal?.dbId,
+      processDbId: contract.processDbId ?? linkedProcess?.dbId,
+      clientDbId: contract.clientDbId ?? linkedProcess?.clientId,
+      propertyDbId: contract.propertyDbId ?? linkedProcess?.propertyId
+    };
+
+    if (contractWithRelations.proposalDbId && contractWithRelations.processDbId && contractWithRelations.clientDbId) {
+      const contractPayload = mapContractToDb(contractWithRelations, linkedProposal);
+      const { data: savedContract, error: contractError } = contractWithRelations.dbId
+        ? await supabase
+          .from('contracts')
+          .update(contractPayload)
+          .eq('id', contractWithRelations.dbId)
+          .select('*, proposals(proposal_number, approved_at), processes(process_number)')
+          .single()
+        : await supabase
+          .from('contracts')
+          .insert(contractPayload)
+          .select('*, proposals(proposal_number, approved_at), processes(process_number)')
+          .single();
+
+      if (contractError) {
+        window.alert('Não foi possível salvar o contrato no Supabase. Tente novamente.');
+        return;
+      }
+
+      if (savedContract) {
+        const dbContract = savedContract as DbContract;
+        contractWithRelations.dbId = dbContract.id;
+
+        if (!contract.dbId) {
+          const totalValue = parseCurrency(contractWithRelations.value);
+          const entryPercentage = linkedProposal?.entryPercentage ?? 50;
+          const entryValue = totalValue * (entryPercentage / 100);
+
+          const financialPayload = {
+            contract_id: dbContract.id,
+            proposal_id: contractWithRelations.proposalDbId,
+            process_id: contractWithRelations.processDbId,
+            client_id: contractWithRelations.clientDbId,
+            status: 'aguardando_entrada',
+            client_name: contractWithRelations.client,
+            service_description: contractWithRelations.service,
+            total_value: totalValue,
+            entry_percentage: entryPercentage,
+            entry_value: entryValue,
+            remaining_value: Math.max(totalValue - entryValue, 0),
+            expected_payment_date: formatDateToDb(contractWithRelations.contractDate)
+          };
+
+          const { data: existingFinancial } = await supabase
+            .from('financial_records')
+            .select('id')
+            .eq('contract_id', dbContract.id)
+            .maybeSingle();
+
+          if (existingFinancial?.id) {
+            await supabase.from('financial_records').update(financialPayload).eq('id', existingFinancial.id);
+          } else {
+            await supabase.from('financial_records').insert(financialPayload);
+          }
+        }
+
+        await supabase
+          .from('processes')
+          .update({
+            current_stage: 'Etapa 05 - Jurídico e contratos',
+            responsible: contractWithRelations.responsible || 'Jurídico'
+          })
+          .eq('id', contractWithRelations.processDbId);
+      }
+    }
+
     setContracts((current) => {
-      const exists = current.some((item) => item.id === contract.id);
-      return exists ? current.map((item) => item.id === contract.id ? contract : item) : [contract, ...current];
+      const exists = current.some((item) => item.id === contractWithRelations.id);
+      return exists ? current.map((item) => item.id === contractWithRelations.id ? contractWithRelations : item) : [contractWithRelations, ...current];
     });
     setSelectedContractProposalId(null);
     setSelectedContractId(null);
   }
 
-  function activateContract(contractId: string) {
+  async function activateContract(contractId: string) {
     const shouldActivate = window.confirm('Deseja ativar este contrato e liberar o processo para execução?');
     if (!shouldActivate) return;
     const activationDate = new Date().toLocaleDateString('pt-BR');
+    const selectedContract = contracts.find((contract) => contract.id === contractId);
+
+    if (selectedContract?.dbId) {
+      const { error } = await supabase
+        .from('contracts')
+        .update({
+          status: 'vigente',
+          activated_at: new Date().toISOString()
+        })
+        .eq('id', selectedContract.dbId);
+
+      if (error) {
+        window.alert('Não foi possível ativar o contrato no Supabase. Tente novamente.');
+        return;
+      }
+
+      await supabase
+        .from('processes')
+        .update({
+          current_stage: 'Etapa 05 - Financeiro',
+          responsible: 'Financeiro'
+        })
+        .eq('id', selectedContract.processDbId);
+    }
+
     setContracts((current) =>
       current.map((contract) =>
         contract.id === contractId
@@ -1759,38 +3165,209 @@ export function App() {
     );
   }
 
-  function addOfficeAction(processId: string, action: OfficeAction) {
+
+  useEffect(() => {
+    if (!isAuthenticated || processes.length === 0) return;
+
+    let isMounted = true;
+
+    supabase
+      .from('documents')
+      .select('*, clients(name), properties(name), processes(process_number)')
+      .order('uploaded_at', { ascending: false })
+      .then(({ data: dbDocuments, error }) => {
+        if (!isMounted || error) return;
+        setDocuments((dbDocuments ?? []).map((document) => mapDbDocumentToDocument(document as DbDocument, processes)));
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, processes]);
+
+  useEffect(() => {
+    if (!isAuthenticated || processes.length === 0) return;
+
+    let isMounted = true;
+
+    supabase
+      .from('executions')
+      .select('*, execution_tasks(*), field_visits(*), field_checklist_items(*), execution_history(*), execution_notes(*)')
+      .order('created_at', { ascending: false })
+      .then(({ data: dbExecutions, error }) => {
+        if (!isMounted || error) return;
+        setExecutionRecords((dbExecutions ?? []).map((execution) => {
+          const dbExecution = execution as DbExecution;
+          const process = processes.find((item) => item.dbId === dbExecution.process_id);
+          return mapDbExecutionToExecutionRecord(dbExecution, process);
+        }));
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, processes]);
+
+  async function ensureExecutionRecord(processId: string) {
+    const process = processes.find((item) => item.id === processId);
+    if (!process?.dbId) return null;
+
+    const localRecord = executionRecords.find((record) => record.processId === processId);
+    if (localRecord?.dbId) return { ...localRecord, processDbId: process.dbId };
+
+    const { data: existingExecution } = await supabase
+      .from('executions')
+      .select('*')
+      .eq('process_id', process.dbId)
+      .maybeSingle();
+
+    if (existingExecution?.id) {
+      return { ...createDefaultExecutionRecord(processId), dbId: existingExecution.id, processDbId: process.dbId };
+    }
+
+    const { data: insertedExecution, error } = await supabase
+      .from('executions')
+      .insert({
+        process_id: process.dbId,
+        status: 'nao_iniciado',
+        department: 'tecnico_escritorio',
+        responsible: process.owner || 'Técnico escritório',
+        started_at: new Date().toISOString(),
+        expected_delivery_date: formatDateToDb(process.dueDate),
+        progress: 0
+      })
+      .select('*')
+      .single();
+
+    if (error || !insertedExecution) return null;
+
+    const nextRecord = { ...createDefaultExecutionRecord(processId), dbId: insertedExecution.id, processDbId: process.dbId };
+    setExecutionRecords((current) => current.some((record) => record.processId === processId)
+      ? current.map((record) => record.processId === processId ? { ...record, dbId: insertedExecution.id, processDbId: process.dbId } : record)
+      : [nextRecord, ...current]);
+    return nextRecord;
+  }
+
+  async function saveExecutionHistory(processId: string, item: ExecutionHistoryItem, executionRecord?: ExecutionRecord | null) {
+    const process = processes.find((processItem) => processItem.id === processId);
+    const execution = executionRecord ?? await ensureExecutionRecord(processId);
+    if (!process?.dbId || !execution?.dbId) return;
+
+    await supabase.from('execution_history').insert({
+      execution_id: execution.dbId,
+      process_id: process.dbId,
+      action_date: formatDateToDb(item.date) ?? new Date().toISOString().split('T')[0],
+      action: item.action,
+      responsible: item.responsible || 'Sistema',
+      observation: item.observation || null
+    });
+  }
+
+  async function addOfficeAction(processId: string, action: OfficeAction) {
+    const execution = await ensureExecutionRecord(processId);
+    const process = processes.find((item) => item.id === processId);
+
+    if (execution?.dbId && process?.dbId) {
+      await supabase.from('execution_history').insert({
+        execution_id: execution.dbId,
+        process_id: process.dbId,
+        action_date: formatDateToDb(action.date) ?? new Date().toISOString().split('T')[0],
+        action: action.type || 'Ação técnica avulsa',
+        responsible: action.responsible || 'Técnico escritório',
+        observation: [action.agency, action.protocol, action.description, action.status].filter(Boolean).join(' - ')
+      });
+    }
+
     setExecutionRecords((current) => {
       const existing = current.find((record) => record.processId === processId);
       if (existing) {
         return current.map((record) => record.processId === processId ? { ...record, officeActions: [action, ...record.officeActions] } : record);
       }
-      return [{ ...createDefaultExecutionRecord(processId), officeActions: [action] }, ...current];
+      return [{ ...createDefaultExecutionRecord(processId), dbId: execution?.dbId, processDbId: process?.dbId, officeActions: [action] }, ...current];
     });
   }
 
-  function addFieldVisit(processId: string, visit: FieldVisit) {
+  async function addFieldVisit(processId: string, visit: FieldVisit) {
+    const execution = await ensureExecutionRecord(processId);
+    const process = processes.find((item) => item.id === processId);
+    let savedVisitId = visit.id;
+
+    if (execution?.dbId && process?.dbId) {
+      const { data: savedVisit } = await supabase
+        .from('field_visits')
+        .insert({
+          execution_id: execution.dbId,
+          process_id: process.dbId,
+          visit_date: formatDateToDb(visit.date),
+          responsible: visit.responsible || null,
+          location: visit.location || null,
+          coordinates: visit.coordinates || null,
+          notes: visit.notes || null,
+          checklist: visit.checklist || null,
+          status: mapFieldVisitStatusToDb(visit.status)
+        })
+        .select('id')
+        .single();
+      savedVisitId = savedVisit?.id ?? savedVisitId;
+    }
+
+    const nextVisit = { ...visit, id: savedVisitId };
     setExecutionRecords((current) => {
       const existing = current.find((record) => record.processId === processId);
       if (existing) {
-        return current.map((record) => record.processId === processId ? { ...record, fieldVisits: [visit, ...record.fieldVisits] } : record);
+        return current.map((record) => record.processId === processId ? { ...record, fieldVisits: [nextVisit, ...record.fieldVisits] } : record);
       }
-      return [{ ...createDefaultExecutionRecord(processId), fieldVisits: [visit] }, ...current];
+      return [{ ...createDefaultExecutionRecord(processId), dbId: execution?.dbId, processDbId: process?.dbId, fieldVisits: [nextVisit] }, ...current];
     });
   }
 
-  function updateExecutionTask(processId: string, task: ExecutionTask) {
+  async function updateExecutionTask(processId: string, task: ExecutionTask) {
+    const execution = await ensureExecutionRecord(processId);
+    const process = processes.find((item) => item.id === processId);
+    const historyItem: ExecutionHistoryItem = {
+      id: `HIST-${processId}-${Date.now()}`,
+      date: task.updatedAt || new Date().toLocaleDateString('pt-BR'),
+      action: `${task.title} alterado para "${task.status}"`,
+      responsible: task.responsible || 'Técnico escritório',
+      observation: task.observation || 'Etapa atualizada na central de execução.'
+    };
+
+    if (execution?.dbId && process?.dbId) {
+      const payload = {
+        execution_id: execution.dbId,
+        process_id: process.dbId,
+        task_key: task.id,
+        title: task.title,
+        status: mapExecutionTaskStatusToDb(task.status),
+        responsible: task.responsible || null,
+        updated_at: formatDateToDb(task.updatedAt),
+        protocol: task.protocol || null,
+        login: task.login || null,
+        password_ref: task.password || null,
+        observation: task.observation || null,
+        attachments: task.attachments,
+        suggested_documents: task.suggestedDocuments
+      };
+      const { data: existingTask } = await supabase
+        .from('execution_tasks')
+        .select('id')
+        .eq('execution_id', execution.dbId)
+        .eq('task_key', task.id)
+        .maybeSingle();
+
+      if (existingTask?.id) {
+        await supabase.from('execution_tasks').update(payload).eq('id', existingTask.id);
+      } else {
+        await supabase.from('execution_tasks').insert(payload);
+      }
+
+      await saveExecutionHistory(processId, historyItem, execution);
+    }
+
     setExecutionRecords((current) => {
-      const baseRecord = current.find((record) => record.processId === processId) ?? createDefaultExecutionRecord(processId);
+      const baseRecord = current.find((record) => record.processId === processId) ?? { ...createDefaultExecutionRecord(processId), dbId: execution?.dbId, processDbId: process?.dbId };
       const currentTasks = baseRecord.tasks ?? createDefaultExecutionTasks();
       const updatedTasks = currentTasks.map((item) => item.id === task.id ? task : item);
-      const historyItem: ExecutionHistoryItem = {
-        id: `HIST-${processId}-${Date.now()}`,
-        date: task.updatedAt,
-        action: `${task.title} alterado para "${task.status}"`,
-        responsible: task.responsible || 'Técnico escritório',
-        observation: task.observation || 'Etapa atualizada na central de execução.'
-      };
       const updatedRecord = { ...baseRecord, tasks: updatedTasks, history: [historyItem, ...(baseRecord.history ?? [])] };
       return current.some((record) => record.processId === processId)
         ? current.map((record) => record.processId === processId ? updatedRecord : record)
@@ -1798,9 +3375,26 @@ export function App() {
     });
   }
 
-  function updateExecutionNotes(processId: string, notes: string) {
+  async function updateExecutionNotes(processId: string, notes: string) {
+    const execution = await ensureExecutionRecord(processId);
+    const process = processes.find((item) => item.id === processId);
+
+    if (execution?.dbId && process?.dbId) {
+      const { data: existingNote } = await supabase
+        .from('execution_notes')
+        .select('id')
+        .eq('execution_id', execution.dbId)
+        .maybeSingle();
+      const payload = { execution_id: execution.dbId, process_id: process.dbId, notes };
+      if (existingNote?.id) {
+        await supabase.from('execution_notes').update(payload).eq('id', existingNote.id);
+      } else {
+        await supabase.from('execution_notes').insert(payload);
+      }
+    }
+
     setExecutionRecords((current) => {
-      const baseRecord = current.find((record) => record.processId === processId) ?? createDefaultExecutionRecord(processId);
+      const baseRecord = current.find((record) => record.processId === processId) ?? { ...createDefaultExecutionRecord(processId), dbId: execution?.dbId, processDbId: process?.dbId };
       const updatedRecord = { ...baseRecord, internalNotes: notes };
       return current.some((record) => record.processId === processId)
         ? current.map((record) => record.processId === processId ? updatedRecord : record)
@@ -1808,9 +3402,36 @@ export function App() {
     });
   }
 
-  function updateExecutionFieldChecklist(processId: string, item: FieldChecklistItem) {
+  async function updateExecutionFieldChecklist(processId: string, item: FieldChecklistItem) {
+    const execution = await ensureExecutionRecord(processId);
+    const process = processes.find((processItem) => processItem.id === processId);
+
+    if (execution?.dbId && process?.dbId) {
+      const payload = {
+        execution_id: execution.dbId,
+        process_id: process.dbId,
+        item_key: item.id,
+        title: item.title,
+        status: mapFieldChecklistStatusToDb(item.status),
+        observation: item.observation || null,
+        attachments: item.attachments
+      };
+      const { data: existingItem } = await supabase
+        .from('field_checklist_items')
+        .select('id')
+        .eq('execution_id', execution.dbId)
+        .eq('item_key', item.id)
+        .maybeSingle();
+
+      if (existingItem?.id) {
+        await supabase.from('field_checklist_items').update(payload).eq('id', existingItem.id);
+      } else {
+        await supabase.from('field_checklist_items').insert(payload);
+      }
+    }
+
     setExecutionRecords((current) => {
-      const baseRecord = current.find((record) => record.processId === processId) ?? createDefaultExecutionRecord(processId);
+      const baseRecord = current.find((record) => record.processId === processId) ?? { ...createDefaultExecutionRecord(processId), dbId: execution?.dbId, processDbId: process?.dbId };
       const checklist = baseRecord.fieldChecklist ?? defaultFieldChecklist;
       const updatedRecord = { ...baseRecord, fieldChecklist: checklist.map((currentItem) => currentItem.id === item.id ? item : currentItem) };
       return current.some((record) => record.processId === processId)
@@ -1819,12 +3440,68 @@ export function App() {
     });
   }
 
-  function updateFinancialRecord(recordId: string, updates: Partial<FinancialRecord>) {
+  async function updateFinancialRecord(recordId: string, updates: Partial<FinancialRecord>) {
+    const updatedStatus = updates.financialStatus ?? 'Liberado para execução';
+    const paymentDate = formatDateToDb(updates.paidAt ?? new Date().toLocaleDateString('pt-BR'));
+
+    const { data: savedRecord, error } = await supabase
+      .from('financial_records')
+      .update({
+        status: mapFinancialStatusToDb(updatedStatus),
+        received_amount: updates.receivedAmount ?? 0,
+        payment_date: paymentDate,
+        payment_method: updates.paymentMethod || null,
+        payment_notes: updates.notes || null,
+        released_for_execution: true,
+        released_at: new Date().toISOString()
+      })
+      .eq('id', recordId)
+      .select('*, contracts(contract_number, contract_date), proposals(proposal_number), processes(process_number)')
+      .single();
+
+    if (error) {
+      window.alert('Não foi possível confirmar o pagamento no Supabase. Tente novamente.');
+      return;
+    }
+
+    const nextRecord = savedRecord
+      ? mapDbFinancialRecordToFinancialRecord(savedRecord as DbFinancialRecord)
+      : ({ ...(updates as FinancialRecord), id: recordId });
+
+    if (nextRecord.processDbId) {
+      await supabase
+        .from('processes')
+        .update({
+          current_stage: 'Etapa 06 - Execução dos serviços',
+          responsible: 'Técnico escritório'
+        })
+        .eq('id', nextRecord.processDbId);
+    }
+
     setFinancialRecords((current) => {
       const exists = current.some((record) => record.id === recordId);
-      if (exists) return current.map((record) => record.id === recordId ? { ...record, ...updates } : record);
-      return [{ ...(updates as FinancialRecord), id: recordId }, ...current];
+      if (exists) return current.map((record) => record.id === recordId ? nextRecord : record);
+      return [nextRecord, ...current];
     });
+  }
+
+  if (authLoading) {
+    return (
+      <main className="login-page login-loading-page">
+        <section className="login-card login-loading-card">
+          <div className="login-card-icon">
+            <Leaf size={26} />
+          </div>
+          <p className="eyebrow">Anjos Ambiental</p>
+          <h2>Carregando acesso</h2>
+          <p className="login-card-copy">Verificando sessão segura do sistema.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginView form={loginForm} error={loginError} isSubmitting={loginSubmitting} onFieldChange={updateLoginField} onSubmit={handleLogin} />;
   }
 
   return (
@@ -1865,6 +3542,10 @@ export function App() {
             <span />
             API {apiStatus === 'online' ? 'online' : 'mock local'}
           </div>
+          <button className="logout-button" type="button" onClick={handleLogout}>
+            <LogOut size={18} />
+            Sair
+          </button>
         </header>
 
         {activeView === 'Dashboard' ? (
@@ -1969,6 +3650,84 @@ export function App() {
         ) : null}
       </main>
     </div>
+  );
+}
+
+function LoginView({
+  form,
+  error,
+  isSubmitting,
+  onFieldChange,
+  onSubmit
+}: {
+  form: LoginFormState;
+  error: string;
+  isSubmitting: boolean;
+  onFieldChange: <K extends keyof LoginFormState>(field: K, value: LoginFormState[K]) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
+}) {
+  return (
+    <main className="login-page">
+      <section className="login-brand-panel">
+        <div className="brand login-brand">
+          <div className="brand-mark">
+            <Leaf size={30} />
+          </div>
+          <div>
+            <strong>Anjos Ambiental</strong>
+          </div>
+        </div>
+        <div>
+          <p className="eyebrow">Sistema operacional ambiental</p>
+          <h1>Gestão completa dos processos ambientais.</h1>
+          <p>
+            Acesse clientes, documentos, propostas, contratos, financeiro e execução em uma única rotina segura.
+          </p>
+        </div>
+        <div className="login-highlights">
+          <span>Processos</span>
+          <span>Contratos</span>
+          <span>Execução</span>
+          <span>Financeiro</span>
+        </div>
+      </section>
+
+      <section className="login-card" aria-label="Acesso ao sistema">
+        <div className="login-card-icon">
+          <KeyRound size={26} />
+        </div>
+        <p className="eyebrow">Acesso restrito</p>
+        <h2>Entrar no sistema</h2>
+        <p className="login-card-copy">Use o e-mail e senha cadastrados para acessar a operação da Anjos Ambiental.</p>
+
+        <form className="login-form" onSubmit={onSubmit}>
+          <label>
+            E-mail
+            <input
+              type="email"
+              value={form.email}
+              onChange={(event) => onFieldChange('email', event.target.value)}
+              placeholder="usuario@email.com"
+              autoComplete="email"
+            />
+          </label>
+          <label>
+            Senha
+            <input
+              type="password"
+              value={form.password}
+              onChange={(event) => onFieldChange('password', event.target.value)}
+              placeholder="Digite sua senha"
+              autoComplete="current-password"
+            />
+          </label>
+          {error ? <div className="login-error">{error}</div> : null}
+          <button className="primary-button dark" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Entrando...' : 'Acessar sistema'}
+          </button>
+        </form>
+      </section>
+    </main>
   );
 }
 
@@ -2082,7 +3841,7 @@ function UsersView({
   onOpenForm: () => void;
   onCloseForm: () => void;
   onFieldChange: <K extends keyof UserFormState>(field: K, value: UserFormState[K]) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>, documents?: DocumentAttachmentMap) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>, documents?: DocumentAttachmentMap) => void | Promise<void>;
 }) {
   return (
     <section className="module-view">
@@ -2193,9 +3952,9 @@ function ClientsView({
   onCloseForm: () => void;
   onFieldChange: <K extends keyof ClientFormState>(field: K, value: ClientFormState[K]) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>, documents?: DocumentAttachmentMap) => void;
-  onAttachDocuments: (client: Client, fileNames: string[], category: string) => void;
+  onAttachDocuments: (client: Client, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
   onDeleteDocument: (documentId: string) => void;
-  onUpdateClient: (clientId: string, updates: ClientFormState) => void;
+  onUpdateClient: (clientId: string, updates: ClientFormState) => void | Promise<void>;
 }) {
   const [selectedDocumentClient, setSelectedDocumentClient] = useState<Client | null>(null);
   const [selectedEditClient, setSelectedEditClient] = useState<Client | null>(null);
@@ -2285,7 +4044,7 @@ function ClientsView({
             client={selectedDocumentClient}
             documents={documents.filter((document) => document.client === selectedDocumentClient.name)}
             onClose={() => setSelectedDocumentClient(null)}
-            onAttach={(fileNames, category) => onAttachDocuments(selectedDocumentClient, fileNames, category)}
+            onAttach={(fileItems, category) => onAttachDocuments(selectedDocumentClient, fileItems, category)}
             onDeleteDocument={onDeleteDocument}
           />
         </div>
@@ -2296,8 +4055,8 @@ function ClientsView({
           <ClientEditModal
             client={selectedEditClient}
             onClose={() => setSelectedEditClient(null)}
-            onSave={(updates) => {
-              onUpdateClient(selectedEditClient.id, updates);
+            onSave={async (updates) => {
+              await onUpdateClient(selectedEditClient.id, updates);
               setSelectedEditClient(null);
             }}
           />
@@ -2382,7 +4141,7 @@ function ClientDocumentsModal({
   client: Client;
   documents: DocumentRecord[];
   onClose: () => void;
-  onAttach: (fileNames: string[], category: string) => void;
+  onAttach: (fileItems: DocumentUploadItem[], category: string) => void;
   onDeleteDocument: (documentId: string) => void;
 }) {
   const groupedDocuments = documentChecklist.reduce<Record<string, DocumentRecord[]>>((groups, item) => {
@@ -2391,8 +4150,8 @@ function ClientDocumentsModal({
   }, {});
 
   function handleFileChange(category: string, event: ChangeEvent<HTMLInputElement>) {
-    const fileNames = Array.from(event.target.files ?? []).map((file) => file.name);
-    onAttach(fileNames, category);
+    const fileItems = Array.from(event.target.files ?? []);
+    onAttach(fileItems, category);
     event.target.value = '';
   }
 
@@ -2430,8 +4189,9 @@ function ClientEditModal({
 }: {
   client: Client;
   onClose: () => void;
-  onSave: (updates: ClientFormState) => void;
+  onSave: (updates: ClientFormState) => void | Promise<void>;
 }) {
+  const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState<ClientFormState>({
     type: client.type,
     name: client.name,
@@ -2452,9 +4212,11 @@ function ClientEditModal({
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSave(form);
+    setIsSaving(true);
+    await onSave(form);
+    setIsSaving(false);
   }
 
   return (
@@ -2527,7 +4289,9 @@ function ClientEditModal({
 
       <div className="form-actions">
         <button type="button" className="secondary-light-button" onClick={onClose}>Cancelar</button>
-        <button type="submit" className="primary-button dark">Salvar alterações</button>
+        <button type="submit" className="primary-button dark" disabled={isSaving}>
+          {isSaving ? 'Salvando...' : 'Salvar alterações'}
+        </button>
       </div>
     </form>
   );
@@ -2731,8 +4495,8 @@ function ProcessesView({
   selectedProcessId: string | null;
   onSelectProcess: (processId: string | null) => void;
   onCloseProcess: () => void;
-  onSaveAnalysis: (processId: string, analysis: TechnicalAnalysis) => void;
-  onAttachDocuments: (process: EnvironmentalProcess, fileNames: string[], category: string) => void;
+  onSaveAnalysis: (processId: string, analysis: TechnicalAnalysis) => void | Promise<void>;
+  onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
   onDeleteDocument: (documentId: string) => void;
 }) {
   const [search, setSearch] = useState('');
@@ -2870,14 +4634,15 @@ function TechnicalAnalysisForm({
 }: {
   process: EnvironmentalProcess;
   documents: DocumentRecord[];
-  onSave: (processId: string, analysis: TechnicalAnalysis) => void;
+  onSave: (processId: string, analysis: TechnicalAnalysis) => void | Promise<void>;
   onClose: () => void;
-  onAttachDocuments: (process: EnvironmentalProcess, fileNames: string[], category: string) => void;
+  onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
   onDeleteDocument: (documentId: string) => void;
 }) {
   const [analysis, setAnalysis] = useState<TechnicalAnalysis>(process.analysis);
   const [documentCategory, setDocumentCategory] = useState('Outros documentos');
-  const [selectedDocumentFiles, setSelectedDocumentFiles] = useState<string[]>([]);
+  const [selectedDocumentFiles, setSelectedDocumentFiles] = useState<DocumentUploadItem[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setAnalysis(process.analysis);
@@ -2887,15 +4652,17 @@ function TechnicalAnalysisForm({
     setAnalysis((current) => ({ ...current, [field]: value }));
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSave(process.id, analysis);
+    setIsSaving(true);
+    await onSave(process.id, analysis);
+    setIsSaving(false);
     onClose();
   }
 
   function handleDocumentSelect(event: ChangeEvent<HTMLInputElement>) {
-    const fileNames = Array.from(event.target.files ?? []).map((file) => file.name);
-    setSelectedDocumentFiles(fileNames);
+    const fileItems = Array.from(event.target.files ?? []);
+    setSelectedDocumentFiles(fileItems);
   }
 
   function handleAttachDocuments() {
@@ -2962,7 +4729,9 @@ function TechnicalAnalysisForm({
           <strong>{analysis.result}</strong>
           <span>Essa decisão orienta a próxima etapa do processo.</span>
         </div>
-        <button className="primary-button dark" type="submit">Salvar parecer técnico</button>
+        <button className="primary-button dark" type="submit" disabled={isSaving}>
+          {isSaving ? 'Salvando...' : 'Salvar parecer técnico'}
+        </button>
       </div>
 
       <div className="process-documents-area">
@@ -2989,12 +4758,15 @@ function TechnicalAnalysisForm({
         </div>
         {selectedDocumentFiles.length > 0 ? (
           <div className="selected-files">
-            {selectedDocumentFiles.map((fileName) => (
-              <div className="selected-file" key={fileName}>
-                <FileText size={17} />
-                <span>{fileName}</span>
-              </div>
-            ))}
+            {selectedDocumentFiles.map((fileItem) => {
+              const fileName = getUploadFileName(fileItem);
+              return (
+                <div className="selected-file" key={fileName}>
+                  <FileText size={17} />
+                  <span>{fileName}</span>
+                </div>
+              );
+            })}
           </div>
         ) : null}
         <div className="analysis-footer">
@@ -3055,8 +4827,8 @@ function ProposalsView({
   onOpenProposal: (processId: string) => void;
   onCloseProposal: () => void;
   onFieldChange: <K extends keyof ProposalFormState>(field: K, value: ProposalFormState[K]) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onApproveProposal: (proposalId: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
+  onApproveProposal: (proposalId: string) => void | Promise<void>;
 }) {
   const [search, setSearch] = useState('');
   const [proposalFilter, setProposalFilter] = useState<ProposalStatus | 'Todos'>('Gerar proposta');
@@ -3188,7 +4960,7 @@ function ProposalFormModal({
   process: EnvironmentalProcess;
   form: ProposalFormState;
   onFieldChange: <K extends keyof ProposalFormState>(field: K, value: ProposalFormState[K]) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
   onClose: () => void;
 }) {
   const totalValue = calculateProposalTotal(form.services);
@@ -3759,8 +5531,8 @@ function ContractsView({
   onSelectProposal: (proposalId: string) => void;
   onSelectContract: (contractId: string) => void;
   onClose: () => void;
-  onSave: (contract: ContractRecord) => void;
-  onActivateContract: (contractId: string) => void;
+  onSave: (contract: ContractRecord) => void | Promise<void>;
+  onActivateContract: (contractId: string) => void | Promise<void>;
 }) {
   const contractQueueProposals = proposals.filter((proposal) => proposal.status === 'Proposta aprovada');
   const pendingContractProposals = contractQueueProposals.filter((proposal) => !contracts.some((contract) => contract.proposalId === proposal.id));
@@ -3894,9 +5666,10 @@ function ContractModal({
   contract: ContractRecord | null;
   contractsCount: number;
   onClose: () => void;
-  onSave: (contract: ContractRecord) => void;
+  onSave: (contract: ContractRecord) => void | Promise<void>;
 }) {
   const source = contract ?? proposal;
+  const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState<ContractRecord>(() => {
     if (contract) return contract;
     if (!proposal) {
@@ -3948,7 +5721,7 @@ function ContractModal({
     update('signedFileName', fileName);
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextStatus: ContractStatus = form.status === 'Vigente' ? 'Vigente' : 'Contrato gerado';
     const generatedContract: ContractRecord = {
@@ -3956,7 +5729,9 @@ function ContractModal({
       status: nextStatus,
       generatedAt: form.generatedAt ?? new Date().toLocaleDateString('pt-BR')
     };
-    onSave(generatedContract);
+    setIsSaving(true);
+    await onSave(generatedContract);
+    setIsSaving(false);
     openContractPdf(generatedContract, true);
   }
 
@@ -4029,7 +5804,9 @@ function ContractModal({
         </div>
         <div className="wizard-actions">
           <button type="button" className="secondary-light-button" onClick={onClose}>Cancelar</button>
-          <button type="submit" className="primary-button dark"><Printer size={17} /> Gerar contrato PDF</button>
+          <button type="submit" className="primary-button dark" disabled={isSaving}>
+            <Printer size={17} /> {isSaving ? 'Salvando...' : 'Gerar contrato PDF'}
+          </button>
         </div>
       </div>
     </form>
@@ -4068,8 +5845,8 @@ function ExecutionView({
   onUpdateTask: (processId: string, task: ExecutionTask) => void;
   onUpdateNotes: (processId: string, notes: string) => void;
   onUpdateFieldChecklist: (processId: string, item: FieldChecklistItem) => void;
-  onAttachDocuments: (process: EnvironmentalProcess, fileNames: string[], category: string) => void;
-  onDeleteDocument: (documentId: string) => boolean | void;
+  onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
+  onDeleteDocument: (documentId: string) => boolean | void | Promise<boolean | void>;
 }) {
   const releasedFinancialRecords = financialRecords.filter((record) => Boolean(record.releasedAt));
   const activeContractProcessIds = contracts
@@ -4191,7 +5968,7 @@ function ExecutionModal({
   onUpdateTask: (processId: string, task: ExecutionTask) => void;
   onUpdateNotes: (processId: string, notes: string) => void;
   onUpdateFieldChecklist: (processId: string, item: FieldChecklistItem) => void;
-  onAttachDocuments: (process: EnvironmentalProcess, fileNames: string[], category: string) => void;
+  onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
   onDeleteDocument: (documentId: string) => void;
 }) {
   const [activeTab, setActiveTab] = useState<'office' | 'field'>('office');
@@ -4270,8 +6047,8 @@ function OfficeExecutionPanel({
   onAdd: (processId: string, action: OfficeAction) => void;
   onUpdateTask: (processId: string, task: ExecutionTask) => void;
   onUpdateNotes: (processId: string, notes: string) => void;
-  onAttachDocuments: (process: EnvironmentalProcess, fileNames: string[], category: string) => void;
-  onDeleteDocument: (documentId: string) => boolean | void;
+  onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
+  onDeleteDocument: (documentId: string) => boolean | void | Promise<boolean | void>;
 }) {
   const tasks = record.tasks ?? createDefaultExecutionTasks();
   const [filter, setFilter] = useState<'Todos' | 'Pendentes' | 'Em andamento' | 'Aguardando aprovação' | 'Concluídos' | 'Rejeitados'>('Todos');
@@ -4388,8 +6165,9 @@ function OfficeExecutionPanel({
                 <label className="secondary-light-button">
                   <UploadCloud size={16} /> Anexar arquivo
                   <input multiple type="file" onChange={(event) => {
-                    const fileNames = Array.from(event.target.files ?? []).map((file) => file.name);
-                    onAttachDocuments(process, fileNames, 'Protocolos');
+                    const fileItems = Array.from(event.target.files ?? []);
+                    const fileNames = fileItems.map((file) => file.name);
+                    onAttachDocuments(process, fileItems, 'Protocolos');
                     if (fileNames.length) onUpdateTask(process.id, { ...task, attachments: [...task.attachments, ...fileNames], updatedAt: new Date().toLocaleDateString('pt-BR') });
                     event.target.value = '';
                   }} />
@@ -4476,8 +6254,8 @@ function FieldExecutionPanel({
   documents: DocumentRecord[];
   onAdd: (processId: string, visit: FieldVisit) => void;
   onUpdateFieldChecklist: (processId: string, item: FieldChecklistItem) => void;
-  onAttachDocuments: (process: EnvironmentalProcess, fileNames: string[], category: string) => void;
-  onDeleteDocument: (documentId: string) => boolean | void;
+  onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
+  onDeleteDocument: (documentId: string) => boolean | void | Promise<boolean | void>;
 }) {
   const visits = record.fieldVisits;
   const checklist = record.fieldChecklist ?? defaultFieldChecklist;
@@ -4535,9 +6313,10 @@ function FieldExecutionPanel({
               <label className="secondary-light-button">
                 <UploadCloud size={15} /> Anexos
                 <input multiple type="file" onChange={(event) => {
-                  const fileNames = Array.from(event.target.files ?? []).map((file) => file.name);
+                  const fileItems = Array.from(event.target.files ?? []);
+                  const fileNames = fileItems.map((file) => file.name);
                   if (fileNames.length) {
-                    onAttachDocuments(process, fileNames, 'Anexos do processo');
+                    onAttachDocuments(process, fileItems, 'Anexos do processo');
                     onUpdateFieldChecklist(process.id, { ...item, attachments: [...item.attachments, ...fileNames] });
                   }
                   event.target.value = '';
@@ -4602,7 +6381,7 @@ function ExecutionTaskModal({
 }: {
   task: ExecutionTask;
   process: EnvironmentalProcess;
-  onAttachDocuments: (process: EnvironmentalProcess, fileNames: string[], category: string) => void;
+  onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
   onClose: () => void;
   onSave: (task: ExecutionTask) => void;
 }) {
@@ -4640,9 +6419,10 @@ function ExecutionTaskModal({
         <strong>Anexar arquivos da etapa</strong>
         <span>Os nomes ficam vinculados ao card até a conexão com o Storage.</span>
         <label className="file-upload-button">Selecionar arquivos<input multiple type="file" onChange={(event) => {
-          const fileNames = Array.from(event.target.files ?? []).map((file) => file.name);
+          const fileItems = Array.from(event.target.files ?? []);
+          const fileNames = fileItems.map((file) => file.name);
           if (fileNames.length) {
-            onAttachDocuments(process, fileNames, 'Protocolos');
+            onAttachDocuments(process, fileItems, 'Protocolos');
             update('attachments', [...form.attachments, ...fileNames]);
           }
           event.target.value = '';
@@ -4667,7 +6447,7 @@ function ExecutionDocumentsCentral({
 }: {
   process: EnvironmentalProcess;
   documents: DocumentRecord[];
-  onAttachDocuments: (process: EnvironmentalProcess, fileNames: string[], category: string) => void;
+  onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
   onDeleteDocument: (documentId: string) => void;
 }) {
   function getCategoryDocuments(category: string) {
@@ -4706,8 +6486,8 @@ function ExecutionDocumentsCentral({
                 documents={getCategoryDocuments(category)}
                 key={`${section.title}-${category}`}
                 onFileChange={(event) => {
-                  const fileNames = Array.from(event.target.files ?? []).map((file) => file.name);
-                  onAttachDocuments(process, fileNames, category === 'Outros da propriedade' ? 'Outros documentos' : category);
+                  const fileItems = Array.from(event.target.files ?? []);
+                  onAttachDocuments(process, fileItems, category === 'Outros da propriedade' ? 'Outros documentos' : category);
                   event.target.value = '';
                 }}
                 onDeleteDocument={onDeleteDocument}
@@ -4745,7 +6525,7 @@ function FinancialView({
   records: FinancialRecord[];
   contracts: ContractRecord[];
   proposals: Proposal[];
-  onUpdateRecord: (recordId: string, updates: Partial<FinancialRecord>) => void;
+  onUpdateRecord: (recordId: string, updates: Partial<FinancialRecord>) => Promise<void>;
 }) {
   const [selectedRecord, setSelectedRecord] = useState<FinancialRecord | null>(null);
   const contractRecords = contracts.filter((contract) => contract.status !== 'Cancelado').map((contract) => {
@@ -4849,8 +6629,8 @@ function FinancialView({
           <PaymentConfirmationModal
             record={selectedRecord}
             onClose={() => setSelectedRecord(null)}
-            onConfirm={(updates) => {
-              onUpdateRecord(selectedRecord.id, updates);
+            onConfirm={async (updates) => {
+              await onUpdateRecord(selectedRecord.id, updates);
               setSelectedRecord(null);
             }}
           />
@@ -4871,7 +6651,7 @@ function PaymentConfirmationModal({
 }: {
   record: FinancialRecord;
   onClose: () => void;
-  onConfirm: (updates: Partial<FinancialRecord>) => void;
+  onConfirm: (updates: Partial<FinancialRecord>) => Promise<void>;
 }) {
   const [form, setForm] = useState({
     receivedAmount: record.entryAmount ? formatCurrencyInput(record.entryAmount) : '',
@@ -4880,14 +6660,16 @@ function PaymentConfirmationModal({
     notes: '',
     confirmed: false
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!form.confirmed) return;
     const releaseDate = new Date().toLocaleDateString('pt-BR');
-    onConfirm({
+    setIsSubmitting(true);
+    await onConfirm({
       ...record,
-      financialStatus: 'Entrada confirmada',
+      financialStatus: 'Liberado para execução',
       paymentStatus: 'Parcial',
       receivedAmount: parseCurrency(form.receivedAmount),
       paidAt: form.paymentDate,
@@ -4895,6 +6677,7 @@ function PaymentConfirmationModal({
       releasedAt: releaseDate,
       notes: form.notes || 'Pagamento inicial confirmado e serviço liberado para execução.'
     });
+    setIsSubmitting(false);
   }
 
   return (
@@ -4941,7 +6724,7 @@ function PaymentConfirmationModal({
         </div>
         <div className="wizard-actions">
           <button type="button" className="secondary-light-button" onClick={onClose}>Cancelar</button>
-          <button type="submit" className="primary-button dark" disabled={!form.confirmed}>Confirmar e liberar execução</button>
+          <button type="submit" className="primary-button dark" disabled={!form.confirmed || isSubmitting}>{isSubmitting ? 'Confirmando...' : 'Confirmar e liberar execução'}</button>
         </div>
       </div>
     </form>
