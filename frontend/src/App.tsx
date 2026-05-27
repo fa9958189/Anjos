@@ -1,17 +1,19 @@
 import {
   AlertCircle,
+  ArrowRight,
   BadgeDollarSign,
   Bell,
   Download,
   Eye,
+  EyeOff,
   FileText,
   FilePlus,
   FolderOpen,
   FolderKanban,
   Home,
-  KeyRound,
-  Leaf,
+  Lock,
   LogOut,
+  Mail,
   MessageCircle,
   MessageSquareText,
   Menu,
@@ -20,6 +22,7 @@ import {
   Printer,
   Scale,
   Search,
+  ShieldCheck,
   ClipboardCheck,
   Trash2,
   UploadCloud,
@@ -1321,8 +1324,8 @@ const navItems: Array<{ label: ViewKey; icon: typeof Home }> = [
   { label: 'Processos', icon: FolderKanban },
   { label: 'Propostas', icon: FileText },
   { label: 'Contratos', icon: Scale },
-  { label: 'Execução', icon: ClipboardCheck },
   { label: 'Financeiro', icon: BadgeDollarSign },
+  { label: 'Execução', icon: ClipboardCheck },
   { label: 'Acompanhamento', icon: MessageSquareText }
 ];
 
@@ -1763,7 +1766,16 @@ function buildDocumentPreviewHtml(document: DocumentRecord) {
 </html>`;
 }
 
-function previewDocument(document: DocumentRecord) {
+async function previewDocument(document: DocumentRecord) {
+  if (document.bucket && document.storagePath) {
+    const { data, error } = await supabase.storage.from(document.bucket).createSignedUrl(document.storagePath, 60);
+    if (!error && data?.signedUrl) {
+      window.open(data.signedUrl, '_blank');
+      return;
+    }
+    window.alert('Não foi possível abrir o arquivo no Supabase Storage.');
+  }
+
   const documentWindow = window.open('', '_blank');
   if (!documentWindow) return;
   documentWindow.document.open();
@@ -1771,7 +1783,21 @@ function previewDocument(document: DocumentRecord) {
   documentWindow.document.close();
 }
 
-function downloadDocument(document: DocumentRecord) {
+async function downloadDocument(document: DocumentRecord) {
+  if (document.bucket && document.storagePath) {
+    const { data, error } = await supabase.storage.from(document.bucket).download(document.storagePath);
+    if (!error && data) {
+      const url = URL.createObjectURL(data);
+      const link = window.document.createElement('a');
+      link.href = url;
+      link.download = document.fileName || `${document.id}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+    window.alert('Não foi possível baixar o arquivo no Supabase Storage.');
+  }
+
   const content = [
     'Anjos Ambiental - Documento',
     `Arquivo: ${document.fileName}`,
@@ -3487,14 +3513,21 @@ export function App() {
 
   if (authLoading) {
     return (
-      <main className="login-page login-loading-page">
-        <section className="login-card login-loading-card">
-          <div className="login-card-icon">
-            <Leaf size={26} />
+      <main className="login-page">
+        <div className="login-bg-glow login-bg-glow-one" />
+        <div className="login-bg-glow login-bg-glow-two" />
+        <div className="login-leaf login-leaf-left" />
+        <div className="login-leaf login-leaf-right" />
+        <section className="login-shell login-loading-shell">
+          <img className="login-main-logo" src="/assets/logo-login.png" alt="Anjos Soluções Ambientais" />
+          <div className="login-card login-loading-card">
+            <div className="login-card-icon logo-icon-frame">
+              <img src="/assets/logo-icon.png" alt="Anjos Ambiental" />
+            </div>
+            <p className="eyebrow">Anjos Ambiental</p>
+            <h2>Carregando acesso</h2>
+            <p className="login-card-copy">Verificando sessão segura do sistema.</p>
           </div>
-          <p className="eyebrow">Anjos Ambiental</p>
-          <h2>Carregando acesso</h2>
-          <p className="login-card-copy">Verificando sessão segura do sistema.</p>
         </section>
       </main>
     );
@@ -3508,8 +3541,8 @@ export function App() {
     <div className="app-shell">
       <aside className={menuOpen ? 'sidebar sidebar-open' : 'sidebar'}>
         <div className="brand">
-          <div className="brand-mark">
-            <Leaf size={28} />
+          <div className="brand-mark brand-image-mark">
+            <img src="/assets/logo-icon.png" alt="Anjos Ambiental" />
           </div>
           <div>
             <strong>Anjos Ambiental</strong>
@@ -3666,66 +3699,101 @@ function LoginView({
   onFieldChange: <K extends keyof LoginFormState>(field: K, value: LoginFormState[K]) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
 }) {
+  const [showPassword, setShowPassword] = useState(false);
+
   return (
     <main className="login-page">
-      <section className="login-brand-panel">
-        <div className="brand login-brand">
-          <div className="brand-mark">
-            <Leaf size={30} />
-          </div>
-          <div>
-            <strong>Anjos Ambiental</strong>
-          </div>
-        </div>
-        <div>
-          <p className="eyebrow">Sistema operacional ambiental</p>
-          <h1>Gestão completa dos processos ambientais.</h1>
-          <p>
-            Acesse clientes, documentos, propostas, contratos, financeiro e execução em uma única rotina segura.
+      <div className="login-bg-glow login-bg-glow-one" />
+      <div className="login-bg-glow login-bg-glow-two" />
+      <div className="login-leaf login-leaf-left" />
+      <div className="login-leaf login-leaf-right" />
+      <div className="login-leaf login-leaf-bottom" />
+      <div className="login-particles" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
+
+      <section className="login-shell" aria-label="Acesso ao sistema Anjos Ambiental">
+        <div className="login-identity">
+          <img className="login-main-logo" src="/assets/logo-login.png" alt="Anjos Soluções Ambientais" />
+          <p className="login-tagline">
+            Tecnologia e gestão ambiental para um <span>futuro sustentável.</span>
           </p>
         </div>
-        <div className="login-highlights">
-          <span>Processos</span>
-          <span>Contratos</span>
-          <span>Execução</span>
-          <span>Financeiro</span>
-        </div>
-      </section>
 
-      <section className="login-card" aria-label="Acesso ao sistema">
-        <div className="login-card-icon">
-          <KeyRound size={26} />
-        </div>
-        <p className="eyebrow">Acesso restrito</p>
-        <h2>Entrar no sistema</h2>
-        <p className="login-card-copy">Use o e-mail e senha cadastrados para acessar a operação da Anjos Ambiental.</p>
+        <form className="login-card" onSubmit={onSubmit} aria-label="Formulário de login">
+          <div className="login-card-heading">
+            <div className="login-card-icon logo-icon-frame">
+              <img src="/assets/logo-icon.png" alt="" />
+            </div>
+            <div>
+              <h1>Acesse sua conta</h1>
+              <p>Informe seu e-mail e senha para entrar.</p>
+            </div>
+          </div>
 
-        <form className="login-form" onSubmit={onSubmit}>
-          <label>
+          <label className="login-field">
             E-mail
-            <input
-              type="email"
-              value={form.email}
-              onChange={(event) => onFieldChange('email', event.target.value)}
-              placeholder="usuario@email.com"
-              autoComplete="email"
-            />
+            <div className="login-input-shell">
+              <Mail size={21} />
+              <input
+                type="email"
+                value={form.email}
+                onChange={(event) => onFieldChange('email', event.target.value)}
+                placeholder="seu@email.com"
+                autoComplete="email"
+              />
+            </div>
           </label>
-          <label>
+
+          <label className="login-field">
             Senha
-            <input
-              type="password"
-              value={form.password}
-              onChange={(event) => onFieldChange('password', event.target.value)}
-              placeholder="Digite sua senha"
-              autoComplete="current-password"
-            />
+            <div className="login-input-shell">
+              <Lock size={21} />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={form.password}
+                onChange={(event) => onFieldChange('password', event.target.value)}
+                placeholder="Digite sua senha"
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                className="login-password-toggle"
+                onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              >
+                {showPassword ? <EyeOff size={21} /> : <Eye size={21} />}
+              </button>
+            </div>
           </label>
+
+          <div className="login-options">
+            <label className="remember-access">
+              <input type="checkbox" defaultChecked />
+              <span>Lembrar meu acesso</span>
+            </label>
+            <button type="button" className="forgot-password">Esqueci minha senha</button>
+          </div>
+
           {error ? <div className="login-error">{error}</div> : null}
-          <button className="primary-button dark" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Entrando...' : 'Acessar sistema'}
+
+          <button className="login-submit" type="submit" disabled={isSubmitting}>
+            <span>{isSubmitting ? 'Entrando...' : 'Entrar no sistema'}</span>
+            <ArrowRight size={23} />
           </button>
         </form>
+
+        <div className="login-trust">
+          <ShieldCheck size={19} />
+          <span>Sistema seguro e confiável</span>
+        </div>
       </section>
     </main>
   );
