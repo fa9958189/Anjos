@@ -33,7 +33,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
-import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { supabase } from './lib/supabase';
 
 type DashboardStatus = 'loading' | 'empty' | 'error' | 'success';
@@ -41,7 +41,7 @@ type DashboardStatus = 'loading' | 'empty' | 'error' | 'success';
 type DashboardSummary = {
   activeProcesses: number;
   openProposals: number;
-  expiringContracts: number;
+  generatedContracts: number;
   pendingTasks: number;
   monthlyRevenue: number;
   contractedValue: number;
@@ -65,6 +65,8 @@ type DashboardActivity = {
 type DashboardData = {
   summary: DashboardSummary;
   stageData: DashboardChartItem[];
+  statusData: DashboardChartItem[];
+  monthlyRevenueData: DashboardChartItem[];
   healthData: DashboardChartItem[];
   recentActivities: DashboardActivity[];
   lastUpdated: string;
@@ -2400,6 +2402,36 @@ function groupRowsByLabel(rows: string[], palette: string[]) {
     .map(([label, value], index) => ({ label, value, color: palette[index % palette.length] }));
 }
 
+function buildMonthlyRevenueData(records: DashboardFinancialRow[]) {
+  const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'short' });
+  const now = new Date();
+  const months = Array.from({ length: 6 }, (_item, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    return {
+      key,
+      label: monthFormatter.format(date).replace('.', ''),
+      value: 0,
+      color: '#72b043'
+    };
+  });
+
+  const monthMap = new Map(months.map((month) => [month.key, month]));
+
+  records.forEach((record) => {
+    const dateValue = record.payment_date ?? record.expected_payment_date;
+    if (!dateValue) return;
+    const date = new Date(`${dateValue}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const month = monthMap.get(key);
+    if (!month) return;
+    month.value += Number(record.received_amount ?? record.total_value ?? 0);
+  });
+
+  return months.filter((month) => month.value > 0);
+}
+
 function getDashboardClientName(clients: DashboardProcessRow['clients']) {
   if (Array.isArray(clients)) return clients[0]?.name ?? '';
   return clients?.name ?? '';
@@ -2435,7 +2467,7 @@ async function loadDashboardFromSupabase(): Promise<DashboardData> {
   const activeProcesses = dashboardProcesses.filter((process) => !isClosedProcess(process.status)).length;
   const delayedProcesses = dashboardProcesses.filter((process) => !isClosedProcess(process.status) && isDateBeforeToday(process.due_date, today)).length;
   const openProposals = dashboardProposals.filter((proposal) => isOpenProposal(proposal.status)).length;
-  const expiringContracts = dashboardContracts.filter((contract) => contract.status === 'vigente' && isDateWithinDays(contract.expiration_date, today, 30)).length;
+  const generatedContracts = dashboardContracts.filter((contract) => contract.status === 'contrato_gerado' || contract.status === 'vigente').length;
   const pendingTasks = dashboardTasks.filter((task) => isPendingTask(task.status)).length;
   const monthlyRevenue = dashboardFinancial.reduce((total, record) => total + Number(record.received_amount ?? 0), 0);
   const contractedValue = dashboardContracts.reduce((total, contract) => total + Number(contract.total_value ?? 0), 0);
@@ -2445,6 +2477,11 @@ async function loadDashboardFromSupabase(): Promise<DashboardData> {
     dashboardProcesses.map((process) => process.current_stage || process.status || 'Sem etapa'),
     stagePalette
   );
+  const statusData = groupRowsByLabel(
+    dashboardProcesses.map((process) => process.status || 'Sem status'),
+    ['#2f6b3a', '#72b043', '#9fbf50', '#d9a441', '#5d8d4f', '#b75d4a']
+  );
+  const monthlyRevenueData = buildMonthlyRevenueData(dashboardFinancial);
 
   const healthData = [
     { label: 'Em dia', value: Math.max(0, activeProcesses - delayedProcesses), color: '#72b043' },
@@ -2473,20 +2510,29 @@ async function loadDashboardFromSupabase(): Promise<DashboardData> {
       meta: contract.total_value ? formatCurrency(Number(contract.total_value)) : 'Contrato',
       status: contract.status.replace(/_/g, ' '),
       date: formatDateBR(contract.activated_at ?? contract.generated_at ?? contract.expiration_date)
+    })),
+    ...dashboardTasks.slice(0, 3).map((task) => ({
+      id: task.id,
+      title: task.title,
+      meta: 'Execução',
+      status: task.status ?? 'Tarefa',
+      date: formatDateBR(task.updated_at)
     }))
-  ].filter((activity) => activity.title || activity.meta).slice(0, 5);
+  ].filter((activity) => activity.title || activity.meta).slice(0, 6);
 
   return {
     summary: {
       activeProcesses,
       openProposals,
-      expiringContracts,
+      generatedContracts,
       pendingTasks,
       monthlyRevenue,
       contractedValue,
       delayedProcesses
     },
     stageData,
+    statusData,
+    monthlyRevenueData,
     healthData,
     recentActivities,
     lastUpdated: new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date())
@@ -2671,7 +2717,7 @@ export function App() {
     return [
       { label: 'Processos em andamento', value: summary.activeProcesses, display: String(summary.activeProcesses), icon: FolderKanban, tone: 'green' },
       { label: 'Propostas abertas', value: summary.openProposals, display: String(summary.openProposals), icon: FileText, tone: 'blue' },
-      { label: 'Contratos vencendo', value: summary.expiringContracts, display: String(summary.expiringContracts), icon: Scale, tone: 'amber' },
+      { label: 'Contratos gerados', value: summary.generatedContracts, display: String(summary.generatedContracts), icon: Scale, tone: 'amber' },
       { label: 'Pendências', value: summary.pendingTasks, display: String(summary.pendingTasks), icon: AlertCircle, tone: 'red' },
       { label: 'Receita recebida', value: summary.monthlyRevenue, display: formatCurrency(summary.monthlyRevenue), icon: BadgeDollarSign, tone: 'emerald' },
       { label: 'Valor contratado', value: summary.contractedValue, display: formatCurrency(summary.contractedValue), icon: ClipboardCheck, tone: 'green' },
@@ -3956,6 +4002,8 @@ function DashboardView({
   const revenueLabel = dashboard?.summary.monthlyRevenue && dashboard.summary.monthlyRevenue > 0 ? 'Receita recebida' : 'Valor contratado';
   const hasRevenue = revenueValue > 0;
   const hasStageData = Boolean(dashboard?.stageData.length);
+  const hasStatusData = Boolean(dashboard?.statusData.length);
+  const hasMonthlyRevenueData = Boolean(dashboard?.monthlyRevenueData.length);
   const hasHealthData = Boolean(dashboard?.healthData.length);
   const attentionTotal = dashboard?.healthData.reduce((total, item) => item.label === 'Em dia' ? total : total + item.value, 0) ?? 0;
 
@@ -4031,6 +4079,53 @@ function DashboardView({
                 </motion.article>
               ) : null}
 
+              {hasMonthlyRevenueData ? (
+                <motion.article className="panel dashboard-chart-panel dashboard-wide-panel" whileHover={{ y: -2 }}>
+                  <div className="section-heading compact">
+                    <div>
+                      <p className="eyebrow">Faturamento</p>
+                      <h2>Evolução mensal</h2>
+                    </div>
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <AreaChart data={dashboard?.monthlyRevenueData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#72b043" stopOpacity={0.32} />
+                          <stop offset="95%" stopColor="#72b043" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid stroke="#e5eddf" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fill: '#627063', fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <YAxis hide />
+                      <Tooltip formatter={(value) => [formatCurrency(Number(value)), 'Faturamento']} />
+                      <Area type="monotone" dataKey="value" stroke="#2f6b3a" strokeWidth={3} fill="url(#revenueGradient)" animationDuration={800} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </motion.article>
+              ) : null}
+
+              {hasStatusData ? (
+                <motion.article className="panel dashboard-chart-panel" whileHover={{ y: -2 }}>
+                  <div className="section-heading compact">
+                    <div>
+                      <p className="eyebrow">Processos</p>
+                      <h2>Processos por status</h2>
+                    </div>
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={dashboard?.statusData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                      <XAxis dataKey="label" tick={{ fill: '#627063', fontSize: 11 }} axisLine={false} tickLine={false} interval={0} />
+                      <YAxis hide allowDecimals={false} />
+                      <Tooltip cursor={{ fill: 'rgba(114, 176, 67, 0.08)' }} formatter={(value) => [value, 'Processos']} />
+                      <Bar dataKey="value" radius={[8, 8, 0, 0]} animationDuration={800}>
+                        {dashboard?.statusData.map((entry) => <Cell key={entry.label} fill={entry.color} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </motion.article>
+              ) : null}
+
               {hasStageData ? (
                 <motion.article className="panel dashboard-chart-panel" whileHover={{ y: -2 }}>
                   <div className="section-heading compact">
@@ -4039,7 +4134,7 @@ function DashboardView({
                       <h2>Volume por etapa</h2>
                     </div>
                   </div>
-                  <ResponsiveContainer width="100%" height={240}>
+                  <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={dashboard?.stageData} layout="vertical" margin={{ top: 4, right: 20, left: 12, bottom: 4 }}>
                       <XAxis type="number" hide allowDecimals={false} />
                       <YAxis type="category" dataKey="label" width={116} tick={{ fill: '#627063', fontSize: 12 }} axisLine={false} tickLine={false} />
@@ -4061,7 +4156,7 @@ function DashboardView({
                     </div>
                   </div>
                   <div className="dashboard-pie-wrap">
-                    <ResponsiveContainer width="100%" height={210}>
+                    <ResponsiveContainer width="100%" height={190}>
                       <PieChart>
                         <Pie data={dashboard?.healthData} dataKey="value" nameKey="label" innerRadius={58} outerRadius={84} paddingAngle={3} animationDuration={800}>
                           {dashboard?.healthData.map((entry) => <Cell key={entry.label} fill={entry.color} />)}
@@ -4083,7 +4178,7 @@ function DashboardView({
                 <div className="section-heading compact">
                   <div>
                     <p className="eyebrow">Movimentação</p>
-                    <h2>Registros recentes</h2>
+                    <h2>Últimas movimentações</h2>
                   </div>
                 </div>
                 <div className="dashboard-activity-list">
