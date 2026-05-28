@@ -30,30 +30,50 @@ import {
   UsersRound,
   X
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
+import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { supabase } from './lib/supabase';
 
-type Summary = {
+type DashboardStatus = 'loading' | 'empty' | 'error' | 'success';
+
+type DashboardSummary = {
   activeProcesses: number;
   openProposals: number;
   expiringContracts: number;
   pendingTasks: number;
   monthlyRevenue: number;
+  contractedValue: number;
   delayedProcesses: number;
 };
 
-type ProcessItem = {
-  id: string;
-  client: string;
-  service: string;
-  status: string;
-  owner: string;
-  dueDate: string;
+type DashboardChartItem = {
+  label: string;
+  value: number;
+  color: string;
 };
 
-type ApiPayload = {
-  summary: Summary;
-  processes: ProcessItem[];
+type DashboardActivity = {
+  id: string;
+  title: string;
+  meta: string;
+  status: string;
+  date: string;
+};
+
+type DashboardData = {
+  summary: DashboardSummary;
+  stageData: DashboardChartItem[];
+  healthData: DashboardChartItem[];
+  recentActivities: DashboardActivity[];
+  lastUpdated: string;
+};
+
+type DashboardState = {
+  status: DashboardStatus;
+  data: DashboardData | null;
+  error?: string;
 };
 
 type ViewKey = 'Dashboard' | 'Usuários' | 'Clientes' | 'Processos' | 'Propostas' | 'Acompanhamento' | 'Execução' | 'Financeiro' | 'Contratos';
@@ -657,43 +677,6 @@ type DocumentRecord = {
   uploadedAt: string;
   uploadedBy: string;
   fileName: string;
-};
-
-const fallbackData: ApiPayload = {
-  summary: {
-    activeProcesses: 18,
-    openProposals: 7,
-    expiringContracts: 3,
-    pendingTasks: 11,
-    monthlyRevenue: 84200,
-    delayedProcesses: 2
-  },
-  processes: [
-    {
-      id: 'AMB-001/2026',
-      client: 'Fazenda Boa Vista',
-      service: 'Licenciamento Ambiental Rural',
-      status: 'Em análise técnica',
-      owner: 'Técnico escritório',
-      dueDate: '28/05/2026'
-    },
-    {
-      id: 'AMB-002/2026',
-      client: 'Sítio Santa Clara',
-      service: 'CAR e regularização documental',
-      status: 'Proposta enviada',
-      owner: 'Comercial',
-      dueDate: '31/05/2026'
-    },
-    {
-      id: 'AMB-003/2026',
-      client: 'Agro Veredas',
-      service: 'Visita técnica e relatório fotográfico',
-      status: 'Em execução',
-      owner: 'Técnico campo',
-      dueDate: '03/06/2026'
-    }
-  ]
 };
 
 const initialClients: Client[] = [
@@ -2365,15 +2348,158 @@ function mapDbFinancialRecordToFinancialRecord(record: DbFinancialRecord): Finan
   };
 }
 
+type DashboardProcessRow = Pick<DbProcess, 'id' | 'process_number' | 'service' | 'status' | 'responsible' | 'due_date' | 'current_stage'> & {
+  clients?: { name: string } | { name: string }[] | null;
+};
+
+type DashboardProposalRow = Pick<DbProposal, 'id' | 'proposal_number' | 'status' | 'total_value' | 'generated_at' | 'approved_at'>;
+type DashboardContractRow = Pick<DbContract, 'id' | 'contract_number' | 'status' | 'total_value' | 'expiration_date' | 'generated_at' | 'activated_at'>;
+type DashboardFinancialRow = Pick<DbFinancialRecord, 'id' | 'status' | 'total_value' | 'received_amount' | 'expected_payment_date' | 'payment_date'>;
+type DashboardExecutionTaskRow = Pick<DbExecutionTask, 'id' | 'title' | 'status' | 'updated_at'>;
+
+function isClosedProcess(status: string | null | undefined) {
+  return normalizeText(status ?? '').match(/concluido|cancelado|encerrado|finalizado/) !== null;
+}
+
+function isOpenProposal(status: DbProposal['status']) {
+  return status === 'gerar_proposta' || status === 'proposta_gerada';
+}
+
+function isPendingTask(status: string | null | undefined) {
+  return !['aprovado', 'concluido', 'cliente ja possui', 'nao se aplica'].includes(normalizeText(status ?? ''));
+}
+
+function isDateBeforeToday(value: string | null | undefined, today: Date) {
+  if (!value) return false;
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return false;
+  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return date < current;
+}
+
+function isDateWithinDays(value: string | null | undefined, today: Date, days: number) {
+  if (!value) return false;
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return false;
+  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const limit = new Date(current);
+  limit.setDate(limit.getDate() + days);
+  return date >= current && date <= limit;
+}
+
+function groupRowsByLabel(rows: string[], palette: string[]) {
+  const groups = rows.reduce<Record<string, number>>((acc, label) => {
+    if (!label) return acc;
+    acc[label] = (acc[label] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return Object.entries(groups)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 6)
+    .map(([label, value], index) => ({ label, value, color: palette[index % palette.length] }));
+}
+
+function getDashboardClientName(clients: DashboardProcessRow['clients']) {
+  if (Array.isArray(clients)) return clients[0]?.name ?? '';
+  return clients?.name ?? '';
+}
+
+async function loadDashboardFromSupabase(): Promise<DashboardData> {
+  const [
+    processesResult,
+    proposalsResult,
+    contractsResult,
+    financialResult,
+    tasksResult
+  ] = await Promise.all([
+    supabase.from('processes').select('id, process_number, service, status, responsible, due_date, current_stage, clients(name)').order('created_at', { ascending: false }),
+    supabase.from('proposals').select('id, proposal_number, status, total_value, generated_at, approved_at').order('created_at', { ascending: false }),
+    supabase.from('contracts').select('id, contract_number, status, total_value, expiration_date, generated_at, activated_at').order('created_at', { ascending: false }),
+    supabase.from('financial_records').select('id, status, total_value, received_amount, expected_payment_date, payment_date').order('created_at', { ascending: false }),
+    supabase.from('execution_tasks').select('id, title, status, updated_at').order('updated_at', { ascending: false })
+  ]);
+
+  const errors = [processesResult.error, proposalsResult.error, contractsResult.error, financialResult.error, tasksResult.error].filter(Boolean);
+  if (errors.length > 0) {
+    throw new Error(errors[0]?.message ?? 'Nao foi possivel carregar o dashboard.');
+  }
+
+  const today = new Date();
+  const dashboardProcesses = (processesResult.data ?? []) as unknown as DashboardProcessRow[];
+  const dashboardProposals = (proposalsResult.data ?? []) as DashboardProposalRow[];
+  const dashboardContracts = (contractsResult.data ?? []) as DashboardContractRow[];
+  const dashboardFinancial = (financialResult.data ?? []) as DashboardFinancialRow[];
+  const dashboardTasks = (tasksResult.data ?? []) as DashboardExecutionTaskRow[];
+
+  const activeProcesses = dashboardProcesses.filter((process) => !isClosedProcess(process.status)).length;
+  const delayedProcesses = dashboardProcesses.filter((process) => !isClosedProcess(process.status) && isDateBeforeToday(process.due_date, today)).length;
+  const openProposals = dashboardProposals.filter((proposal) => isOpenProposal(proposal.status)).length;
+  const expiringContracts = dashboardContracts.filter((contract) => contract.status === 'vigente' && isDateWithinDays(contract.expiration_date, today, 30)).length;
+  const pendingTasks = dashboardTasks.filter((task) => isPendingTask(task.status)).length;
+  const monthlyRevenue = dashboardFinancial.reduce((total, record) => total + Number(record.received_amount ?? 0), 0);
+  const contractedValue = dashboardContracts.reduce((total, contract) => total + Number(contract.total_value ?? 0), 0);
+
+  const stagePalette = ['#2f6b3a', '#72b043', '#1f6b5b', '#9fbf50', '#d9a441', '#5d8d4f'];
+  const stageData = groupRowsByLabel(
+    dashboardProcesses.map((process) => process.current_stage || process.status || 'Sem etapa'),
+    stagePalette
+  );
+
+  const healthData = [
+    { label: 'Em dia', value: Math.max(0, activeProcesses - delayedProcesses), color: '#72b043' },
+    { label: 'Pendências', value: pendingTasks, color: '#d9a441' },
+    { label: 'Atrasados', value: delayedProcesses, color: '#b75d4a' }
+  ].filter((item) => item.value > 0);
+
+  const recentActivities = [
+    ...dashboardProcesses.slice(0, 3).map((process) => ({
+      id: process.id,
+      title: process.process_number,
+      meta: [getDashboardClientName(process.clients), process.service].filter(Boolean).join(' • '),
+      status: process.status || process.current_stage || 'Processo',
+      date: formatDateBR(process.due_date)
+    })),
+    ...dashboardProposals.slice(0, 2).map((proposal) => ({
+      id: proposal.id,
+      title: proposal.proposal_number,
+      meta: proposal.total_value ? formatCurrency(Number(proposal.total_value)) : 'Proposta',
+      status: proposal.status.replace(/_/g, ' '),
+      date: formatDateBR(proposal.approved_at ?? proposal.generated_at)
+    })),
+    ...dashboardContracts.slice(0, 2).map((contract) => ({
+      id: contract.id,
+      title: contract.contract_number,
+      meta: contract.total_value ? formatCurrency(Number(contract.total_value)) : 'Contrato',
+      status: contract.status.replace(/_/g, ' '),
+      date: formatDateBR(contract.activated_at ?? contract.generated_at ?? contract.expiration_date)
+    }))
+  ].filter((activity) => activity.title || activity.meta).slice(0, 5);
+
+  return {
+    summary: {
+      activeProcesses,
+      openProposals,
+      expiringContracts,
+      pendingTasks,
+      monthlyRevenue,
+      contractedValue,
+      delayedProcesses
+    },
+    stageData,
+    healthData,
+    recentActivities,
+    lastUpdated: new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date())
+  };
+}
+
 export function App() {
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginSubmitting, setLoginSubmitting] = useState(false);
   const [loginForm, setLoginForm] = useState<LoginFormState>({ email: '', password: '' });
   const [loginError, setLoginError] = useState('');
-  const [data, setData] = useState<ApiPayload>(fallbackData);
-  const [apiStatus, setApiStatus] = useState<'online' | 'offline'>('offline');
+  const [dashboardState, setDashboardState] = useState<DashboardState>({ status: 'loading', data: null });
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewKey>('Dashboard');
   const [users, setUsers] = useState<SystemUser[]>(initialUsers);
@@ -2418,17 +2544,30 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    fetch(`${apiBaseUrl}/api/dashboard/summary`)
-      .then((response) => response.json())
-      .then((payload: ApiPayload) => {
-        setData(payload);
-        setApiStatus('online');
+    if (!isAuthenticated) return;
+
+    let isMounted = true;
+    setDashboardState({ status: 'loading', data: null });
+
+    loadDashboardFromSupabase()
+      .then((dashboardData) => {
+        if (!isMounted) return;
+        const hasAnyData = Object.values(dashboardData.summary).some((value) => value > 0) || dashboardData.recentActivities.length > 0;
+        setDashboardState({ status: hasAnyData ? 'success' : 'empty', data: dashboardData });
       })
-      .catch(() => {
-        setData(fallbackData);
-        setApiStatus('offline');
+      .catch((error: unknown) => {
+        if (!isMounted) return;
+        setDashboardState({
+          status: 'error',
+          data: null,
+          error: error instanceof Error ? error.message : 'Nao foi possivel carregar o dashboard.'
+        });
       });
-  }, []);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -2525,17 +2664,20 @@ export function App() {
     };
   }, [isAuthenticated]);
 
-  const cards = useMemo(
-    () => [
-      { label: 'Processos em andamento', value: data.summary.activeProcesses, icon: FolderKanban, tone: 'green' },
-      { label: 'Propostas abertas', value: data.summary.openProposals, icon: FileText, tone: 'blue' },
-      { label: 'Contratos vencendo', value: data.summary.expiringContracts, icon: Scale, tone: 'amber' },
-      { label: 'Pendências', value: data.summary.pendingTasks, icon: AlertCircle, tone: 'red' },
-      { label: 'Receita prevista', value: formatCurrency(data.summary.monthlyRevenue), icon: BadgeDollarSign, tone: 'emerald' },
-      { label: 'Processos atrasados', value: data.summary.delayedProcesses, icon: Bell, tone: 'orange' }
-    ],
-    [data]
-  );
+  const dashboardCards = useMemo(() => {
+    const summary = dashboardState.data?.summary;
+    if (!summary) return [];
+
+    return [
+      { label: 'Processos em andamento', value: summary.activeProcesses, display: String(summary.activeProcesses), icon: FolderKanban, tone: 'green' },
+      { label: 'Propostas abertas', value: summary.openProposals, display: String(summary.openProposals), icon: FileText, tone: 'blue' },
+      { label: 'Contratos vencendo', value: summary.expiringContracts, display: String(summary.expiringContracts), icon: Scale, tone: 'amber' },
+      { label: 'Pendências', value: summary.pendingTasks, display: String(summary.pendingTasks), icon: AlertCircle, tone: 'red' },
+      { label: 'Receita recebida', value: summary.monthlyRevenue, display: formatCurrency(summary.monthlyRevenue), icon: BadgeDollarSign, tone: 'emerald' },
+      { label: 'Valor contratado', value: summary.contractedValue, display: formatCurrency(summary.contractedValue), icon: ClipboardCheck, tone: 'green' },
+      { label: 'Processos atrasados', value: summary.delayedProcesses, display: String(summary.delayedProcesses), icon: Bell, tone: 'orange' }
+    ].filter((card) => card.value > 0);
+  }, [dashboardState.data]);
 
   const filteredClients = useMemo(() => {
     const term = clientSearch.trim().toLowerCase();
@@ -3572,9 +3714,9 @@ export function App() {
             <Search size={18} />
             <input placeholder="Buscar cliente, processo, CPF, proposta ou protocolo" />
           </div>
-          <div className={apiStatus === 'online' ? 'api-pill online' : 'api-pill'}>
+          <div className={dashboardState.status === 'error' ? 'api-pill' : 'api-pill online'}>
             <span />
-            API {apiStatus === 'online' ? 'online' : 'mock local'}
+            {dashboardState.status === 'error' ? 'Supabase indisponivel' : 'Supabase online'}
           </div>
           <button className="logout-button" type="button" onClick={handleLogout}>
             <LogOut size={18} />
@@ -3583,7 +3725,7 @@ export function App() {
         </header>
 
         {activeView === 'Dashboard' ? (
-          <DashboardView data={data} cards={cards} />
+          <DashboardView state={dashboardState} cards={dashboardCards} />
         ) : activeView === 'Usuários' ? (
           <UsersView
             users={users}
@@ -3800,97 +3942,166 @@ function LoginView({
   );
 }
 
-function DashboardView({ data, cards }: { data: ApiPayload; cards: Array<{ label: string; value: string | number; icon: typeof Home; tone: string }> }) {
-  const revenueGoal = 120000;
-  const revenuePercent = Math.min(100, Math.round((data.summary.monthlyRevenue / revenueGoal) * 100));
-  const stageData = [
-    { label: 'Processos', value: data.summary.activeProcesses, color: '#2f6b3a' },
-    { label: 'Propostas', value: data.summary.openProposals, color: '#72b043' },
-    { label: 'Contratos', value: data.summary.expiringContracts, color: '#b6d986' },
-    { label: 'Atrasos', value: data.summary.delayedProcesses, color: '#d9a441' }
-  ];
-  const maxStageValue = Math.max(...stageData.map((item) => item.value));
-  const healthData = [
-    { label: 'Em dia', value: Math.max(0, data.summary.activeProcesses - data.summary.delayedProcesses - data.summary.pendingTasks), color: '#72b043' },
-    { label: 'Pendências', value: data.summary.pendingTasks, color: '#d9a441' },
-    { label: 'Atrasados', value: data.summary.delayedProcesses, color: '#b75d4a' }
-  ];
-  const healthTotal = healthData.reduce((total, item) => total + item.value, 0) || 1;
+function DashboardView({
+  state,
+  cards
+}: {
+  state: DashboardState;
+  cards: Array<{ label: string; value: number; display: string; icon: LucideIcon; tone: string }>;
+}) {
+  const dashboard = state.data;
+  const revenueValue = dashboard?.summary.monthlyRevenue && dashboard.summary.monthlyRevenue > 0
+    ? dashboard.summary.monthlyRevenue
+    : dashboard?.summary.contractedValue ?? 0;
+  const revenueLabel = dashboard?.summary.monthlyRevenue && dashboard.summary.monthlyRevenue > 0 ? 'Receita recebida' : 'Valor contratado';
+  const hasRevenue = revenueValue > 0;
+  const hasStageData = Boolean(dashboard?.stageData.length);
+  const hasHealthData = Boolean(dashboard?.healthData.length);
+  const attentionTotal = dashboard?.healthData.reduce((total, item) => item.label === 'Em dia' ? total : total + item.value, 0) ?? 0;
 
   return (
-    <section className="module-view dashboard-view">
+    <section className="module-view dashboard-view w-full">
       <div className="module-header">
         <div>
           <p className="eyebrow">Painel executivo</p>
           <h1>Dashboard</h1>
-          <p>Indicadores rápidos para acompanhar receita, operação, gargalos e desempenho geral da Anjos Ambiental.</p>
+          <p>Indicadores reais do Supabase para acompanhar operação, gargalos e desempenho geral da Anjos Ambiental.</p>
         </div>
+        {dashboard?.lastUpdated ? <span className="dashboard-updated">Atualizado em {dashboard.lastUpdated}</span> : null}
       </div>
 
-      <section className="metrics-grid" aria-label="Resumo operacional">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <article className={'metric-card ' + card.tone} key={card.label}>
-              <div className="metric-icon"><Icon size={20} /></div>
-              <span>{card.label}</span>
-              <strong>{card.value}</strong>
-            </article>
-          );
-        })}
-      </section>
+      <AnimatePresence mode="wait">
+        {state.status === 'loading' ? (
+          <motion.div className="dashboard-state-panel dashboard-loading-panel" key="loading" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <div className="dashboard-loader" />
+            <strong>Carregando dados reais</strong>
+            <span>Buscando processos, propostas, contratos e financeiro no Supabase.</span>
+          </motion.div>
+        ) : state.status === 'error' ? (
+          <motion.div className="dashboard-state-panel dashboard-error-panel" key="error" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <AlertCircle size={24} />
+            <strong>Não foi possível carregar o dashboard</strong>
+            <span>{state.error}</span>
+          </motion.div>
+        ) : state.status === 'empty' ? (
+          <motion.div className="dashboard-state-panel" key="empty" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <FolderKanban size={24} />
+            <strong>Nenhum dado encontrado</strong>
+            <span>Quando houver registros no Supabase, os indicadores aparecem automaticamente aqui.</span>
+          </motion.div>
+        ) : (
+          <motion.div className="dashboard-success-stack grid gap-[18px]" key="success" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            {cards.length > 0 ? (
+              <section className="metrics-grid" aria-label="Resumo operacional">
+                {cards.map((card, index) => {
+                  const Icon = card.icon;
+                  return (
+                    <motion.article
+                      className={'metric-card ' + card.tone}
+                      key={card.label}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.04 }}
+                      whileHover={{ y: -3 }}
+                    >
+                      <div className="metric-icon"><Icon size={20} /></div>
+                      <span>{card.label}</span>
+                      <strong>{card.display}</strong>
+                    </motion.article>
+                  );
+                })}
+              </section>
+            ) : null}
 
-      <section className="dashboard-analytics-grid">
-        <article className="panel revenue-panel">
-          <div className="section-heading compact">
-            <div>
-              <p className="eyebrow">Resultado financeiro</p>
-              <h2>Receita prevista no mês</h2>
-            </div>
-            <strong>{revenuePercent}% da meta</strong>
-          </div>
-          <div className="revenue-value">{formatCurrency(data.summary.monthlyRevenue)}</div>
-          <div className="revenue-track"><span style={{ width: revenuePercent + '%' }} /></div>
-          <div className="revenue-footer">
-            <span>Meta mensal</span>
-            <strong>{formatCurrency(revenueGoal)}</strong>
-          </div>
-        </article>
+            <section className="dashboard-analytics-grid">
+              {hasRevenue ? (
+                <motion.article className="panel revenue-panel" whileHover={{ y: -2 }}>
+                  <div className="section-heading compact">
+                    <div>
+                      <p className="eyebrow">Resultado financeiro</p>
+                      <h2>{revenueLabel}</h2>
+                    </div>
+                  </div>
+                  <div className="revenue-value">{formatCurrency(revenueValue)}</div>
+                  <div className="revenue-track"><motion.span initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 0.8, ease: 'easeOut' }} /></div>
+                  <div className="revenue-footer">
+                    <span>Origem</span>
+                    <strong>{dashboard?.summary.monthlyRevenue ? 'Registros financeiros' : 'Contratos'}</strong>
+                  </div>
+                </motion.article>
+              ) : null}
 
-        <article className="panel">
-          <div className="section-heading compact">
-            <div>
-              <p className="eyebrow">Funil operacional</p>
-              <h2>Volume por etapa</h2>
-            </div>
-          </div>
-          <div className="bar-chart-list">
-            {stageData.map((item) => (
-              <div className="bar-chart-row" key={item.label}>
-                <span>{item.label}</span>
-                <div><strong style={{ width: `${Math.max(8, (item.value / maxStageValue) * 100)}%`, background: item.color }} /></div>
-                <b>{item.value}</b>
-              </div>
-            ))}
-          </div>
-        </article>
+              {hasStageData ? (
+                <motion.article className="panel dashboard-chart-panel" whileHover={{ y: -2 }}>
+                  <div className="section-heading compact">
+                    <div>
+                      <p className="eyebrow">Funil operacional</p>
+                      <h2>Volume por etapa</h2>
+                    </div>
+                  </div>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={dashboard?.stageData} layout="vertical" margin={{ top: 4, right: 20, left: 12, bottom: 4 }}>
+                      <XAxis type="number" hide allowDecimals={false} />
+                      <YAxis type="category" dataKey="label" width={116} tick={{ fill: '#627063', fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <Tooltip cursor={{ fill: 'rgba(114, 176, 67, 0.08)' }} formatter={(value) => [value, 'Registros']} />
+                      <Bar dataKey="value" radius={[0, 8, 8, 0]} animationDuration={800}>
+                        {dashboard?.stageData.map((entry) => <Cell key={entry.label} fill={entry.color} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </motion.article>
+              ) : null}
 
-        <article className="panel">
-          <div className="section-heading compact">
-            <div>
-              <p className="eyebrow">Saúde da operação</p>
-              <h2>Pendências e atrasos</h2>
-            </div>
-          </div>
-          <div className="donut-chart" style={{ background: `conic-gradient(#72b043 0 ${healthData[0].value / healthTotal * 100}%, #d9a441 0 ${(healthData[0].value + healthData[1].value) / healthTotal * 100}%, #b75d4a 0 100%)` }}>
-            <div><strong>{data.summary.pendingTasks + data.summary.delayedProcesses}</strong><span>atenção</span></div>
-          </div>
-          <div className="chart-legend">
-            {healthData.map((item) => <span key={item.label}><i style={{ background: item.color }} />{item.label}: {item.value}</span>)}
-          </div>
-        </article>
-      </section>
+              {hasHealthData ? (
+                <motion.article className="panel dashboard-chart-panel" whileHover={{ y: -2 }}>
+                  <div className="section-heading compact">
+                    <div>
+                      <p className="eyebrow">Saúde da operação</p>
+                      <h2>Pendências e atrasos</h2>
+                    </div>
+                  </div>
+                  <div className="dashboard-pie-wrap">
+                    <ResponsiveContainer width="100%" height={210}>
+                      <PieChart>
+                        <Pie data={dashboard?.healthData} dataKey="value" nameKey="label" innerRadius={58} outerRadius={84} paddingAngle={3} animationDuration={800}>
+                          {dashboard?.healthData.map((entry) => <Cell key={entry.label} fill={entry.color} />)}
+                        </Pie>
+                        <Tooltip formatter={(value) => [value, 'Registros']} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="dashboard-pie-center"><strong>{attentionTotal}</strong><span>atenção</span></div>
+                  </div>
+                  <div className="chart-legend">
+                    {dashboard?.healthData.map((item) => <span key={item.label}><i style={{ background: item.color }} />{item.label}: {item.value}</span>)}
+                  </div>
+                </motion.article>
+              ) : null}
+            </section>
 
+            {dashboard?.recentActivities.length ? (
+              <section className="panel dashboard-activity-panel">
+                <div className="section-heading compact">
+                  <div>
+                    <p className="eyebrow">Movimentação</p>
+                    <h2>Registros recentes</h2>
+                  </div>
+                </div>
+                <div className="dashboard-activity-list">
+                  {dashboard.recentActivities.map((activity) => (
+                    <div className="dashboard-activity-row" key={`${activity.id}-${activity.title}`}>
+                      <div>
+                        <strong>{activity.title}</strong>
+                        <span>{activity.meta}</span>
+                      </div>
+                      <small>{activity.status}{activity.date ? ` • ${activity.date}` : ''}</small>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }
