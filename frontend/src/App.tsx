@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { supabase } from './lib/supabase';
 
@@ -2569,6 +2569,24 @@ export function App() {
   const [serviceTrackings, setServiceTrackings] = useState<ServiceTracking[]>(initialServiceTrackings);
   const [documents, setDocuments] = useState<DocumentRecord[]>(initialDocuments);
 
+  const refreshDashboard = useCallback(async (showLoading = false) => {
+    if (showLoading) {
+      setDashboardState({ status: 'loading', data: null });
+    }
+
+    try {
+      const dashboardData = await loadDashboardFromSupabase();
+      const hasAnyData = Object.values(dashboardData.summary).some((value) => value > 0) || dashboardData.recentActivities.length > 0;
+      setDashboardState({ status: hasAnyData ? 'success' : 'empty', data: dashboardData });
+    } catch (error: unknown) {
+      setDashboardState({
+        status: 'error',
+        data: null,
+        error: error instanceof Error ? error.message : 'Nao foi possivel carregar o dashboard.'
+      });
+    }
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -2592,28 +2610,8 @@ export function App() {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    let isMounted = true;
-    setDashboardState({ status: 'loading', data: null });
-
-    loadDashboardFromSupabase()
-      .then((dashboardData) => {
-        if (!isMounted) return;
-        const hasAnyData = Object.values(dashboardData.summary).some((value) => value > 0) || dashboardData.recentActivities.length > 0;
-        setDashboardState({ status: hasAnyData ? 'success' : 'empty', data: dashboardData });
-      })
-      .catch((error: unknown) => {
-        if (!isMounted) return;
-        setDashboardState({
-          status: 'error',
-          data: null,
-          error: error instanceof Error ? error.message : 'Nao foi possivel carregar o dashboard.'
-        });
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [isAuthenticated]);
+    refreshDashboard(true);
+  }, [isAuthenticated, refreshDashboard]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -2925,6 +2923,9 @@ export function App() {
     }
     setClientForm(emptyClientForm);
     setIsClientFormOpen(false);
+    if (insertedProcess) {
+      await refreshDashboard();
+    }
   }
 
   async function updateClient(clientId: string, updates: ClientFormState) {
@@ -3097,6 +3098,9 @@ export function App() {
           : process
       )
     );
+    if (selectedProcess?.dbId) {
+      await refreshDashboard();
+    }
   }
 
   function openProposalForm(processId: string) {
@@ -3202,6 +3206,9 @@ export function App() {
     setProposals((current) => [proposal, ...current]);
     openProposalPdf(proposal, true);
     closeProposalForm();
+    if (proposal.dbId) {
+      await refreshDashboard();
+    }
   }
 
   async function approveProposal(proposalId: string) {
@@ -3254,6 +3261,9 @@ export function App() {
           : proposal
       )
     );
+    if (proposalToApprove?.dbId) {
+      await refreshDashboard();
+    }
   }
 
   async function saveContract(contract: ContractRecord) {
@@ -3340,6 +3350,9 @@ export function App() {
     });
     setSelectedContractProposalId(null);
     setSelectedContractId(null);
+    if (contractWithRelations.dbId) {
+      await refreshDashboard();
+    }
   }
 
   async function activateContract(contractId: string) {
@@ -3378,6 +3391,9 @@ export function App() {
           : contract
       )
     );
+    if (selectedContract?.dbId) {
+      await refreshDashboard();
+    }
   }
 
 
@@ -3588,6 +3604,9 @@ export function App() {
         ? current.map((record) => record.processId === processId ? updatedRecord : record)
         : [updatedRecord, ...current];
     });
+    if (execution?.dbId && process?.dbId) {
+      await refreshDashboard();
+    }
   }
 
   async function updateExecutionNotes(processId: string, notes: string) {
@@ -3698,6 +3717,7 @@ export function App() {
       if (exists) return current.map((record) => record.id === recordId ? nextRecord : record);
       return [nextRecord, ...current];
     });
+    await refreshDashboard();
   }
 
   if (authLoading) {
@@ -3759,10 +3779,6 @@ export function App() {
           <div className="search-box">
             <Search size={18} />
             <input placeholder="Buscar cliente, processo, CPF, proposta ou protocolo" />
-          </div>
-          <div className={dashboardState.status === 'error' ? 'api-pill' : 'api-pill online'}>
-            <span />
-            {dashboardState.status === 'error' ? 'Supabase indisponivel' : 'Supabase online'}
           </div>
           <button className="logout-button" type="button" onClick={handleLogout}>
             <LogOut size={18} />
@@ -4015,7 +4031,7 @@ function DashboardView({
           <h1>Dashboard</h1>
           <p>Indicadores reais do Supabase para acompanhar operação, gargalos e desempenho geral da Anjos Ambiental.</p>
         </div>
-        {dashboard?.lastUpdated ? <span className="dashboard-updated">Atualizado em {dashboard.lastUpdated}</span> : null}
+        {dashboard?.lastUpdated ? <span className="dashboard-updated">Dados sincronizados</span> : null}
       </div>
 
       <AnimatePresence mode="wait">
