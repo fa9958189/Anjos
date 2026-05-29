@@ -1955,6 +1955,15 @@ function mapPaymentMethodToDb(method: PaymentMethod) {
   return methodMap[method];
 }
 
+function mapFinancialPaymentMethodToDb(method?: string | null) {
+  if (!method) return null;
+  const normalized = normalizeText(method);
+  if (normalized === 'pix') return 'pix';
+  if (normalized === 'boleto') return 'boleto';
+  if (normalized.includes('transferencia')) return 'transferencia_bancaria';
+  return method;
+}
+
 function mapDbProposalStatus(status: DbProposal['status']): ProposalStatus {
   const statusMap: Record<DbProposal['status'], ProposalStatus> = {
     gerar_proposta: 'Gerar proposta',
@@ -3698,7 +3707,7 @@ export function App() {
       status: updatedStatus === 'Liberado para execução' ? 'entrada_confirmada' : mapFinancialStatusToDb(updatedStatus),
       received_amount: updates.receivedAmount ?? 0,
       payment_date: paymentDate,
-      payment_method: updates.paymentMethod || null,
+      payment_method: mapFinancialPaymentMethodToDb(updates.paymentMethod),
       payment_notes: updates.notes || null,
       released_for_execution: true,
       released_at: new Date().toISOString()
@@ -3751,9 +3760,10 @@ export function App() {
         recordId,
         operation: hasPersistedFinancialRecord ? 'update' : 'insert',
         payload: financialPayload,
+        relationIds,
         error
       });
-      window.alert('Não foi possível confirmar o pagamento no Supabase. Tente novamente.');
+      window.alert(`Não foi possível confirmar o pagamento no Supabase.\n\n${error.message}`);
       return;
     }
 
