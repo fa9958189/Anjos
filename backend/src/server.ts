@@ -3,7 +3,14 @@ import express from 'express';
 
 const app = express();
 const port = Number(process.env.PORT ?? 3333);
-const corsOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173,http://127.0.0.1:5173')
+const defaultCorsOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://anjosambiental.com.br',
+  'https://www.anjosambiental.com.br',
+  'https://anjos-oito.vercel.app'
+];
+const corsOrigins = (process.env.CORS_ORIGIN ?? defaultCorsOrigins.join(','))
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
@@ -18,6 +25,7 @@ app.use(
         return;
       }
 
+      console.warn('Origem bloqueada pelo CORS:', origin, 'Origens permitidas:', corsOrigins.join(','));
       callback(new Error('Origem nao permitida pelo CORS'));
     }
   })

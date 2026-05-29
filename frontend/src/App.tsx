@@ -3681,8 +3681,21 @@ export function App() {
   async function updateFinancialRecord(recordId: string, updates: Partial<FinancialRecord>) {
     const updatedStatus = updates.financialStatus ?? 'Liberado para execução';
     const paymentDate = formatDateToDb(updates.paidAt ?? new Date().toLocaleDateString('pt-BR'));
+    const relatedContract = contracts.find((contract) => contract.id === updates.contractId || contract.dbId === updates.contractDbId);
+    const relatedProposal = proposals.find((proposal) => proposal.id === updates.proposalId || proposal.dbId === updates.proposalDbId || proposal.id === relatedContract?.proposalId);
+    const relatedProcess = processes.find((process) =>
+      process.id === updates.processId ||
+      process.dbId === updates.processDbId ||
+      process.id === relatedContract?.processId
+    );
+    const relationIds = {
+      contract_id: updates.contractDbId ?? relatedContract?.dbId,
+      proposal_id: updates.proposalDbId ?? relatedProposal?.dbId ?? relatedContract?.proposalDbId,
+      process_id: updates.processDbId ?? relatedProcess?.dbId ?? relatedContract?.processDbId,
+      client_id: updates.clientDbId ?? relatedProcess?.clientId ?? relatedContract?.clientDbId
+    };
     const financialPayload = {
-      status: mapFinancialStatusToDb(updatedStatus),
+      status: updatedStatus === 'Liberado para execução' ? 'entrada_confirmada' : mapFinancialStatusToDb(updatedStatus),
       received_amount: updates.receivedAmount ?? 0,
       payment_date: paymentDate,
       payment_method: updates.paymentMethod || null,
@@ -3690,7 +3703,6 @@ export function App() {
       released_for_execution: true,
       released_at: new Date().toISOString()
     };
-    const selectFinancialRecord = '*, contracts(contract_number, contract_date), proposals(proposal_number), processes(process_number)';
     const hasPersistedFinancialRecord = isUuid(recordId);
 
     console.info('[Financeiro] Confirmar pagamento - dados enviados', {
@@ -3698,12 +3710,7 @@ export function App() {
       operation: hasPersistedFinancialRecord ? 'update' : 'insert',
       recordId,
       payload: financialPayload,
-      relationIds: {
-        contract_id: updates.contractDbId,
-        proposal_id: updates.proposalDbId,
-        process_id: updates.processDbId,
-        client_id: updates.clientDbId
-      }
+      relationIds
     });
 
     const { data: savedRecord, error } = hasPersistedFinancialRecord
@@ -3711,16 +3718,16 @@ export function App() {
         .from('financial_records')
         .update(financialPayload)
         .eq('id', recordId)
-        .select(selectFinancialRecord)
+        .select('*')
         .single()
       : await supabase
         .from('financial_records')
         .insert({
           ...financialPayload,
-          contract_id: updates.contractDbId ?? null,
-          proposal_id: updates.proposalDbId ?? null,
-          process_id: updates.processDbId ?? null,
-          client_id: updates.clientDbId ?? null,
+          contract_id: relationIds.contract_id ?? null,
+          proposal_id: relationIds.proposal_id ?? null,
+          process_id: relationIds.process_id ?? null,
+          client_id: relationIds.client_id ?? null,
           client_name: updates.client ?? '',
           service_description: updates.service ?? '',
           total_value: updates.amount ?? 0,
@@ -3729,7 +3736,7 @@ export function App() {
           remaining_value: updates.remainingAmount ?? 0,
           expected_payment_date: formatDateToDb(updates.dueDate ?? '')
         })
-        .select(selectFinancialRecord)
+        .select('*')
         .single();
 
     console.info('[Financeiro] Confirmar pagamento - resposta Supabase', {
@@ -3751,23 +3758,34 @@ export function App() {
     }
 
     const nextRecord = savedRecord
-      ? mapDbFinancialRecordToFinancialRecord(savedRecord as DbFinancialRecord)
+      ? {
+          ...mapDbFinancialRecordToFinancialRecord(savedRecord as DbFinancialRecord),
+          contractId: updates.contractId ?? relatedContract?.id ?? mapDbFinancialRecordToFinancialRecord(savedRecord as DbFinancialRecord).contractId,
+          proposalId: updates.proposalId ?? relatedProposal?.id ?? mapDbFinancialRecordToFinancialRecord(savedRecord as DbFinancialRecord).proposalId,
+          processId: updates.processId ?? relatedProcess?.id ?? mapDbFinancialRecordToFinancialRecord(savedRecord as DbFinancialRecord).processId,
+          contractDbId: relationIds.contract_id,
+          proposalDbId: relationIds.proposal_id,
+          processDbId: relationIds.process_id,
+          clientDbId: relationIds.client_id
+        }
       : ({ ...(updates as FinancialRecord), id: recordId });
 
-    if (nextRecord.processDbId) {
+    const processDbId = isUuid(nextRecord.processDbId) ? nextRecord.processDbId : relatedProcess?.dbId;
+
+    if (processDbId) {
       const processUpdatePayload = {
         current_stage: 'Etapa 06 - Execução dos serviços',
         responsible: 'Técnico escritório'
       };
       console.info('[Financeiro] Atualizando processo após pagamento', {
         table: 'processes',
-        process_id: nextRecord.processDbId,
+        process_id: processDbId,
         payload: processUpdatePayload
       });
       const { error: processUpdateError } = await supabase
         .from('processes')
         .update(processUpdatePayload)
-        .eq('id', nextRecord.processDbId);
+        .eq('id', processDbId);
 
       console.info('[Financeiro] Resposta atualização do processo', {
         table: 'processes',
