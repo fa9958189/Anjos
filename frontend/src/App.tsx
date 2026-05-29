@@ -4246,13 +4246,10 @@ function LandingPage() {
 
       <section className="landing-hero">
         <div className="landing-hero-content">
-          <img className="landing-hero-logo" src="/assets/logo-login.png" alt="Anjos Soluções Ambientais" />
-          <h1>ANJOS AMBIENTAL</h1>
-          <h2>Soluções completas em licenciamento, regularização e gestão ambiental.</h2>
+          <h1>Soluções completas em licenciamento, regularização e gestão ambiental.</h1>
           <p>Atuamos na regularização ambiental de propriedades rurais, empresas e empreendimentos, oferecendo acompanhamento técnico especializado e gestão digital dos processos.</p>
           <div className="landing-actions">
             <a className="landing-primary-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer">Entrar em contato</a>
-            <a className="landing-secondary-button" href="/login">Acessar Sistema</a>
           </div>
         </div>
         <div className="landing-hero-panel" aria-hidden="true">
@@ -4293,15 +4290,6 @@ function LandingPage() {
             </article>
           ))}
         </div>
-      </section>
-
-      <section className="landing-system-section">
-        <div>
-          <p className="landing-eyebrow">Sistema de acompanhamento</p>
-          <h2>Acompanhe seus processos online</h2>
-          <p>Nossos clientes possuem acesso ao sistema da Anjos Ambiental para acompanhar documentos, etapas, protocolos, liberações e andamento dos processos em tempo real.</p>
-        </div>
-        <a className="landing-primary-button" href="/login">Acessar Sistema</a>
       </section>
 
       <section className="landing-section landing-contact" id="contato">
