@@ -2321,6 +2321,10 @@ function mapInvoiceStatusFromDb(status: DbFinancialRecord['invoice_status']): Fi
   return status ? statusMap[status] : 'Não emitida';
 }
 
+function isUuid(value: string | undefined) {
+  return Boolean(value?.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i));
+}
+
 function mapDbFinancialRecordToFinancialRecord(record: DbFinancialRecord): FinancialRecord {
   return {
     id: record.id,
@@ -3677,23 +3681,71 @@ export function App() {
   async function updateFinancialRecord(recordId: string, updates: Partial<FinancialRecord>) {
     const updatedStatus = updates.financialStatus ?? 'Liberado para execução';
     const paymentDate = formatDateToDb(updates.paidAt ?? new Date().toLocaleDateString('pt-BR'));
+    const financialPayload = {
+      status: mapFinancialStatusToDb(updatedStatus),
+      received_amount: updates.receivedAmount ?? 0,
+      payment_date: paymentDate,
+      payment_method: updates.paymentMethod || null,
+      payment_notes: updates.notes || null,
+      released_for_execution: true,
+      released_at: new Date().toISOString()
+    };
+    const selectFinancialRecord = '*, contracts(contract_number, contract_date), proposals(proposal_number), processes(process_number)';
+    const hasPersistedFinancialRecord = isUuid(recordId);
 
-    const { data: savedRecord, error } = await supabase
-      .from('financial_records')
-      .update({
-        status: mapFinancialStatusToDb(updatedStatus),
-        received_amount: updates.receivedAmount ?? 0,
-        payment_date: paymentDate,
-        payment_method: updates.paymentMethod || null,
-        payment_notes: updates.notes || null,
-        released_for_execution: true,
-        released_at: new Date().toISOString()
-      })
-      .eq('id', recordId)
-      .select('*, contracts(contract_number, contract_date), proposals(proposal_number), processes(process_number)')
-      .single();
+    console.info('[Financeiro] Confirmar pagamento - dados enviados', {
+      table: 'financial_records',
+      operation: hasPersistedFinancialRecord ? 'update' : 'insert',
+      recordId,
+      payload: financialPayload,
+      relationIds: {
+        contract_id: updates.contractDbId,
+        proposal_id: updates.proposalDbId,
+        process_id: updates.processDbId,
+        client_id: updates.clientDbId
+      }
+    });
+
+    const { data: savedRecord, error } = hasPersistedFinancialRecord
+      ? await supabase
+        .from('financial_records')
+        .update(financialPayload)
+        .eq('id', recordId)
+        .select(selectFinancialRecord)
+        .single()
+      : await supabase
+        .from('financial_records')
+        .insert({
+          ...financialPayload,
+          contract_id: updates.contractDbId ?? null,
+          proposal_id: updates.proposalDbId ?? null,
+          process_id: updates.processDbId ?? null,
+          client_id: updates.clientDbId ?? null,
+          client_name: updates.client ?? '',
+          service_description: updates.service ?? '',
+          total_value: updates.amount ?? 0,
+          entry_percentage: updates.entryPercentage ?? 0,
+          entry_value: updates.entryAmount ?? updates.receivedAmount ?? 0,
+          remaining_value: updates.remainingAmount ?? 0,
+          expected_payment_date: formatDateToDb(updates.dueDate ?? '')
+        })
+        .select(selectFinancialRecord)
+        .single();
+
+    console.info('[Financeiro] Confirmar pagamento - resposta Supabase', {
+      table: 'financial_records',
+      data: savedRecord,
+      error
+    });
 
     if (error) {
+      console.error('[Financeiro] Erro ao confirmar pagamento no Supabase', {
+        table: 'financial_records',
+        recordId,
+        operation: hasPersistedFinancialRecord ? 'update' : 'insert',
+        payload: financialPayload,
+        error
+      });
       window.alert('Não foi possível confirmar o pagamento no Supabase. Tente novamente.');
       return;
     }
@@ -3703,13 +3755,24 @@ export function App() {
       : ({ ...(updates as FinancialRecord), id: recordId });
 
     if (nextRecord.processDbId) {
-      await supabase
+      const processUpdatePayload = {
+        current_stage: 'Etapa 06 - Execução dos serviços',
+        responsible: 'Técnico escritório'
+      };
+      console.info('[Financeiro] Atualizando processo após pagamento', {
+        table: 'processes',
+        process_id: nextRecord.processDbId,
+        payload: processUpdatePayload
+      });
+      const { error: processUpdateError } = await supabase
         .from('processes')
-        .update({
-          current_stage: 'Etapa 06 - Execução dos serviços',
-          responsible: 'Técnico escritório'
-        })
+        .update(processUpdatePayload)
         .eq('id', nextRecord.processDbId);
+
+      console.info('[Financeiro] Resposta atualização do processo', {
+        table: 'processes',
+        error: processUpdateError
+      });
     }
 
     setFinancialRecords((current) => {
@@ -6927,6 +6990,10 @@ function FinancialView({
     const remainingAmount = parseCurrency(contract.value) - entryAmount;
     return existing ?? {
       id: 'REC-' + contract.id.replace('CONT', ''),
+      contractDbId: contract.dbId,
+      proposalDbId: contract.proposalDbId,
+      processDbId: contract.processDbId,
+      clientDbId: contract.clientDbId,
       contractId: contract.id,
       proposalId: contract.proposalId,
       processId: contract.processId,
