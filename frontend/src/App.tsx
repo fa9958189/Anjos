@@ -2595,6 +2595,7 @@ async function loadDashboardFromSupabase(): Promise<DashboardData> {
 export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [loginSubmitting, setLoginSubmitting] = useState(false);
   const [loginForm, setLoginForm] = useState<LoginFormState>({ email: '', password: '' });
   const [loginError, setLoginError] = useState('');
@@ -2646,11 +2647,13 @@ export function App() {
     supabase.auth.getSession().then(({ data: sessionData }) => {
       if (!isMounted) return;
       setIsAuthenticated(Boolean(sessionData.session));
+      setAuthUserId(sessionData.session?.user.id ?? null);
       setAuthLoading(false);
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(Boolean(session));
+      setAuthUserId(session?.user.id ?? null);
       setAuthLoading(false);
     });
 
@@ -3035,7 +3038,7 @@ export function App() {
         storagePath
       });
 
-      const { data: insertedDocument, error: insertError } = await supabase.from('documents').insert({
+      const documentPayload = {
         client_id: client.id,
         property_id: relatedProcess?.propertyId ?? null,
         process_id: relatedProcess?.dbId ?? null,
@@ -3045,8 +3048,16 @@ export function App() {
         file_path: buildStoredDocumentPath(bucket, storagePath),
         file_type: item.type || null,
         file_size: item.size,
-        uploaded_by: 'Comercial'
-      }).select('*').single();
+        uploaded_by: authUserId
+      };
+
+      console.info('[Documentos] Upload cliente - payload enviado', {
+        table: 'documents',
+        payload: documentPayload,
+        uploadedByLabel: 'Comercial'
+      });
+
+      const { data: insertedDocument, error: insertError } = await supabase.from('documents').insert(documentPayload).select('*').single();
 
       if (insertError || !insertedDocument) {
         console.error('[Documentos] Upload cliente - erro ao salvar metadados', {
@@ -3054,6 +3065,7 @@ export function App() {
           fileName: item.name,
           bucket,
           storagePath,
+          payload: documentPayload,
           error: insertError
         });
         window.alert(`O arquivo ${item.name} foi enviado, mas os dados não foram salvos no banco.\n\n${insertError?.message ?? 'Erro desconhecido.'}`);
@@ -3128,20 +3140,27 @@ export function App() {
       }
 
       if (process.dbId) {
+        const documentPayload = {
+          client_id: process.clientId ?? null,
+          property_id: process.propertyId ?? null,
+          process_id: process.dbId,
+          category,
+          name: category,
+          file_name: fileName,
+          file_path: storagePath ? buildStoredDocumentPath(bucket, storagePath) : null,
+          file_type: mimeType || null,
+          file_size: fileSize || null,
+          uploaded_by: authUserId
+        };
+        console.info('[Documentos] Upload processo - payload enviado', {
+          table: 'documents',
+          payload: documentPayload,
+          uploadedByLabel: 'Técnico escritório'
+        });
+
         const { data: insertedDocument, error: documentError } = await supabase
           .from('documents')
-          .insert({
-            client_id: process.clientId ?? null,
-            property_id: process.propertyId ?? null,
-            process_id: process.dbId,
-            category,
-            name: category,
-            file_name: fileName,
-            file_path: storagePath ? buildStoredDocumentPath(bucket, storagePath) : null,
-            file_type: mimeType || null,
-            file_size: fileSize || null,
-            uploaded_by: 'Técnico escritório'
-          })
+          .insert(documentPayload)
           .select('*')
           .single();
 
@@ -3160,6 +3179,7 @@ export function App() {
             fileName,
             bucket,
             storagePath,
+            payload: documentPayload,
             error: documentError
           });
           window.alert(`O arquivo ${fileName} foi enviado, mas os dados não foram salvos no banco.\n\n${documentError.message}`);
