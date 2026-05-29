@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, MouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { supabase } from './lib/supabase';
 
@@ -4208,17 +4208,13 @@ export function App() {
 }
 
 const institutionalServices = [
-  'Cadastro Ambiental Rural (CAR)',
   'Licenciamento Ambiental',
+  'Cadastro Ambiental Rural (CAR)',
   'Outorga de Uso da Água',
   'PRAD',
-  'Regularização Ambiental',
-  'Certificados Ambientais',
-  'Gestão de Processos Ambientais',
-  'Consultoria Técnica',
   'Georreferenciamento',
-  'Levantamentos e Relatórios Técnicos',
   'Gestão Documental Ambiental',
+  'Relatórios Técnicos',
   'Acompanhamento de Processos'
 ];
 
@@ -4231,50 +4227,73 @@ function WhatsAppFloatingButton() {
 }
 
 function LandingPage() {
+  function updateHeroParallax(event: MouseEvent<HTMLElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+    event.currentTarget.style.setProperty('--forest-x', `${50 + x * 2}%`);
+    event.currentTarget.style.setProperty('--forest-y', `${50 + y * 2}%`);
+  }
+
   return (
     <main className="landing-page">
       <nav className="landing-nav" aria-label="Navegação institucional">
         <a className="landing-logo-link" href="/" aria-label="Anjos Ambiental">
-          <img src="/assets/logo-login.png" alt="Anjos Soluções Ambientais" />
+          <img src="/assets/Logotipo-Anjos-sem-tag-V3.png" alt="Anjos Soluções Ambientais" />
         </a>
         <div>
+          <a href="#quem-somos">Quem Somos</a>
           <a href="#servicos">Serviços</a>
           <a href="#contato">Contato</a>
           <a className="landing-nav-login" href="/login">Acessar Sistema</a>
         </div>
       </nav>
 
-      <section className="landing-hero">
+      <section className="landing-hero" onMouseMove={updateHeroParallax}>
+        <div className="landing-leaves" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
         <div className="landing-hero-content">
-          <h1>Soluções completas em licenciamento, regularização e gestão ambiental.</h1>
-          <p>Atuamos na regularização ambiental de propriedades rurais, empresas e empreendimentos, oferecendo acompanhamento técnico especializado e gestão digital dos processos.</p>
+          <p className="landing-eyebrow">Tecnologia ambiental e regularização</p>
+          <h1>Regularização Ambiental com Segurança e Agilidade</h1>
+          <p>Licenciamentos, CAR, Outorgas, PRAD, Georreferenciamento e Gestão Ambiental para propriedades rurais e empresas.</p>
           <div className="landing-actions">
-            <a className="landing-primary-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer">Entrar em contato</a>
+            <a className="landing-primary-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer">Solicitar Atendimento</a>
+            <a className="landing-secondary-button" href="/login">Acessar Sistema</a>
           </div>
         </div>
         <div className="landing-hero-panel" aria-hidden="true">
           <div>
             <span>Licenciamento</span>
-            <strong>Gestão ambiental integrada</strong>
+            <strong>Processos conduzidos com método técnico</strong>
           </div>
           <div>
-            <span>Documentos</span>
-            <strong>Processos organizados online</strong>
+            <span>Gestão</span>
+            <strong>Documentos, etapas e protocolos organizados</strong>
           </div>
           <div>
-            <span>Protocolos</span>
-            <strong>Acompanhamento técnico contínuo</strong>
+            <span>Campo</span>
+            <strong>Atuação ambiental para imóveis e empresas</strong>
           </div>
         </div>
       </section>
 
-      <section className="landing-section landing-about">
-        <div>
+      <section className="landing-section landing-about" id="quem-somos">
+        <div className="landing-about-media" aria-hidden="true">
+          <img src="/assets/Capa Reels.png" alt="" />
+        </div>
+        <div className="landing-about-copy">
           <p className="landing-eyebrow">Quem Somos</p>
           <h2>Quem Somos</h2>
+          <p>A Anjos Ambiental une consultoria técnica, organização documental e gestão ambiental para regularizar propriedades rurais, empresas e empreendimentos com segurança.</p>
+          <p>Nossa missão é conduzir cada processo com transparência, agilidade e compromisso ambiental, reduzindo riscos e trazendo clareza para decisões importantes.</p>
+          <p>Atuamos com experiência em licenciamento, cadastros ambientais, outorgas, relatórios técnicos e acompanhamento de processos junto aos órgãos competentes.</p>
         </div>
-        <p>A Anjos Ambiental é especializada em consultoria e gestão ambiental, auxiliando produtores rurais, empresas e empreendedores na regularização de seus projetos e no cumprimento das exigências ambientais.</p>
-        <p>Nossa missão é oferecer soluções técnicas com organização, transparência e agilidade.</p>
       </section>
 
       <section className="landing-section" id="servicos">
@@ -4285,7 +4304,7 @@ function LandingPage() {
         <div className="landing-services-grid">
           {institutionalServices.map((service) => (
             <article className="landing-service-card" key={service}>
-              <FileText size={22} />
+              <span><FileText size={22} /></span>
               <strong>{service}</strong>
             </article>
           ))}
@@ -4296,7 +4315,8 @@ function LandingPage() {
         <div>
           <p className="landing-eyebrow">Contato</p>
           <h2>Entre em contato</h2>
-          <p>WhatsApp: (63) 99203-6652</p>
+          <p>Fale com a Anjos Ambiental pelo WhatsApp e solicite orientação para seu processo ambiental.</p>
+          <strong>WhatsApp: (63) 99203-6652</strong>
         </div>
         <a className="landing-primary-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer">
           <MessageCircle size={19} /> Falar no WhatsApp
@@ -4304,10 +4324,11 @@ function LandingPage() {
       </section>
 
       <footer className="landing-footer">
-        <img src="/assets/logo-login.png" alt="Anjos Soluções Ambientais" />
+        <img src="/assets/Logotipo-Anjos-sem-tag-V3.png" alt="Anjos Soluções Ambientais" />
         <div>
           <strong>Anjos Ambiental</strong>
           <span>Soluções Ambientais e Gestão de Processos</span>
+          <span>WhatsApp: (63) 99203-6652</span>
           <small>© Todos os direitos reservados.</small>
         </div>
       </footer>
