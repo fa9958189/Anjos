@@ -1354,6 +1354,11 @@ const formatDateToDb = (value: string) => {
 const normalizeText = (value: string) =>
   value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
+const createCustomExecutionTaskId = (title: string) => {
+  const slug = normalizeText(title).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return `custom-${slug || Date.now()}`;
+};
+
 const createDefaultExecutionTasks = (): ExecutionTask[] =>
   executionTaskTemplates.map((template, index) => ({
     ...template,
@@ -1442,7 +1447,7 @@ function buildProposalHtml(proposal: Proposal) {
     .proposal-page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 18mm; background: #fff; }
     .proposal-header { display: grid; grid-template-columns: 1fr 1.15fr; gap: 18px; align-items: start; padding-bottom: 18px; border-bottom: 3px solid #1e4d2b; }
     .brand { display: flex; gap: 12px; align-items: center; }
-    .brand-mark { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 12px; background: #d6f0bd; color: #1e4d2b; font-size: 30px; font-weight: 900; }
+    .brand-logo { width: 136px; height: auto; display: block; object-fit: contain; }
     h1, h2, h3, p { margin: 0; }
     h1 { margin-top: 22px; color: #1e4d2b; font-size: 28px; text-align: center; letter-spacing: 0; }
     h2 { color: #14261a; font-size: 17px; }
@@ -1478,7 +1483,7 @@ function buildProposalHtml(proposal: Proposal) {
   <main class="proposal-page">
     <header class="proposal-header">
       <div class="brand company">
-        <div class="brand-mark">A</div>
+        <img class="brand-logo" src="/assets/logo-login.png" alt="Anjos Soluções Ambientais" />
         <div>
           <strong>ANJOS AMBIENTAL</strong>
           <span>Consultoria e Licenciamento Ambiental</span>
@@ -1638,7 +1643,7 @@ function buildContractHtml(contract: ContractRecord) {
     .contract-page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 18mm; background: #fff; }
     .contract-header { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; padding-bottom: 16px; border-bottom: 3px solid #1e4d2b; }
     .brand { display: flex; gap: 12px; align-items: center; }
-    .brand-mark { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 12px; background: #d6f0bd; color: #1e4d2b; font-size: 30px; font-weight: 900; }
+    .brand-logo { width: 136px; height: auto; display: block; object-fit: contain; }
     h1, h2, h3, p { margin: 0; }
     h1 { margin: 24px 0 18px; color: #1e4d2b; font-size: 25px; text-align: center; letter-spacing: 0; }
     h2 { color: #14261a; font-size: 15px; margin: 20px 0 8px; }
@@ -1667,7 +1672,7 @@ function buildContractHtml(contract: ContractRecord) {
   <main class="contract-page">
     <header class="contract-header">
       <div class="brand company">
-        <div class="brand-mark">A</div>
+        <img class="brand-logo" src="/assets/logo-login.png" alt="Anjos Soluções Ambientais" />
         <div>
           <strong>ANJOS AMBIENTAL</strong>
           <span>Consultoria e Licenciamento Ambiental</span>
@@ -1717,87 +1722,82 @@ function openContractPdf(contract: ContractRecord, print = false) {
   }
 }
 
-function buildDocumentPreviewHtml(document: DocumentRecord) {
-  return `<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8" />
-  <title>${escapeHtml(document.fileName)}</title>
-  <style>
-    body { margin: 0; padding: 32px; background: #eef5ea; color: #17291c; font-family: Arial, Helvetica, sans-serif; }
-    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 12px; background: #fff; border: 1px solid #dce8d6; }
-    h1 { margin: 0 0 10px; color: #1e4d2b; font-size: 26px; }
-    p { color: #566557; line-height: 1.55; }
-    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 18px; }
-    .box { padding: 12px; border: 1px solid #dce8d6; border-radius: 8px; background: #fbfdf8; }
-    span { display: block; color: #6b8b69; font-size: 12px; font-weight: 800; text-transform: uppercase; }
-    strong { display: block; margin-top: 5px; color: #14261a; }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>${escapeHtml(document.fileName)}</h1>
-    <p>Pré-visualização operacional do documento anexado ao sistema Anjos Ambiental. Quando o Supabase Storage estiver conectado, esta ação abrirá o arquivo original.</p>
-    <section class="grid">
-      <div class="box"><span>Categoria</span><strong>${escapeHtml(document.category)}</strong></div>
-      <div class="box"><span>Cliente</span><strong>${escapeHtml(document.client)}</strong></div>
-      <div class="box"><span>Propriedade</span><strong>${escapeHtml(document.propertyName || 'Cadastro do cliente')}</strong></div>
-      <div class="box"><span>Processo</span><strong>${escapeHtml(document.processId || 'Sem processo vinculado')}</strong></div>
-      <div class="box"><span>Enviado por</span><strong>${escapeHtml(document.uploadedBy)}</strong></div>
-      <div class="box"><span>Data</span><strong>${escapeHtml(document.uploadedAt)}</strong></div>
-    </section>
-  </main>
-</body>
-</html>`;
-}
-
 async function previewDocument(document: DocumentRecord) {
-  if (document.bucket && document.storagePath) {
-    const { data, error } = await supabase.storage.from(document.bucket).createSignedUrl(document.storagePath, 60);
-    if (!error && data?.signedUrl) {
-      window.open(data.signedUrl, '_blank');
-      return;
-    }
-    window.alert('Não foi possível abrir o arquivo no Supabase Storage.');
+  console.info('[Documentos] Visualizar documento - dados', {
+    fileName: document.fileName,
+    bucket: document.bucket,
+    storagePath: document.storagePath
+  });
+
+  if (!document.bucket || !document.storagePath) {
+    console.error('[Documentos] Visualizar documento - arquivo sem caminho do Storage', document);
+    window.alert('Este documento não possui caminho válido no Supabase Storage. Envie o arquivo novamente.');
+    return;
   }
 
-  const documentWindow = window.open('', '_blank');
-  if (!documentWindow) return;
-  documentWindow.document.open();
-  documentWindow.document.write(buildDocumentPreviewHtml(document));
-  documentWindow.document.close();
+  const { data, error } = await supabase.storage.from(document.bucket).createSignedUrl(document.storagePath, 300);
+  if (!error && data?.signedUrl) {
+    console.info('[Documentos] Visualizar documento - URL gerada', {
+      fileName: document.fileName,
+      bucket: document.bucket,
+      storagePath: document.storagePath,
+      url: data.signedUrl
+    });
+    window.open(data.signedUrl, '_blank');
+    return;
+  }
+
+  const publicUrl = supabase.storage.from(document.bucket).getPublicUrl(document.storagePath).data.publicUrl;
+  console.error('[Documentos] Visualizar documento - erro ao gerar signed URL', {
+    fileName: document.fileName,
+    bucket: document.bucket,
+    storagePath: document.storagePath,
+    publicUrl,
+    error
+  });
+  if (publicUrl) {
+    window.open(publicUrl, '_blank');
+    return;
+  }
+  window.alert(`Não foi possível abrir o arquivo no Supabase Storage.\n\n${error?.message ?? 'URL indisponível.'}`);
 }
 
 async function downloadDocument(document: DocumentRecord) {
-  if (document.bucket && document.storagePath) {
-    const { data, error } = await supabase.storage.from(document.bucket).download(document.storagePath);
-    if (!error && data) {
-      const url = URL.createObjectURL(data);
-      const link = window.document.createElement('a');
-      link.href = url;
-      link.download = document.fileName || `${document.id}.pdf`;
-      link.click();
-      URL.revokeObjectURL(url);
-      return;
-    }
-    window.alert('Não foi possível baixar o arquivo no Supabase Storage.');
+  console.info('[Documentos] Baixar documento - dados', {
+    fileName: document.fileName,
+    bucket: document.bucket,
+    storagePath: document.storagePath
+  });
+
+  if (!document.bucket || !document.storagePath) {
+    console.error('[Documentos] Baixar documento - arquivo sem caminho do Storage', document);
+    window.alert('Este documento não possui caminho válido no Supabase Storage. Envie o arquivo novamente.');
+    return;
   }
 
-  const content = [
-    'Anjos Ambiental - Documento',
-    `Arquivo: ${document.fileName}`,
-    `Categoria: ${document.category}`,
-    `Cliente: ${document.client}`,
-    `Propriedade: ${document.propertyName || 'Cadastro do cliente'}`,
-    `Processo: ${document.processId || 'Sem processo vinculado'}`,
-    `Enviado por: ${document.uploadedBy}`,
-    `Data: ${document.uploadedAt}`
-  ].join('\n');
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
+  const { data, error } = await supabase.storage.from(document.bucket).download(document.storagePath);
+  if (error || !data) {
+    console.error('[Documentos] Baixar documento - erro Supabase Storage', {
+      fileName: document.fileName,
+      bucket: document.bucket,
+      storagePath: document.storagePath,
+      error
+    });
+    window.alert(`Não foi possível baixar o arquivo no Supabase Storage.\n\n${error?.message ?? 'Arquivo indisponível.'}`);
+    return;
+  }
+
+  console.info('[Documentos] Baixar documento - blob recebido', {
+    fileName: document.fileName,
+    bucket: document.bucket,
+    storagePath: document.storagePath,
+    size: data.size,
+    type: data.type
+  });
+  const url = URL.createObjectURL(data);
   const link = window.document.createElement('a');
   link.href = url;
-  link.download = document.fileName || `${document.id}.txt`;
+  link.download = document.fileName || `${document.id}.pdf`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -2242,6 +2242,27 @@ function mapDbExecutionToExecutionRecord(execution: DbExecution, process: Enviro
       suggestedDocuments: row.suggested_documents ?? template.suggestedDocuments
     } : template;
   });
+  const defaultTaskKeys = new Set(executionTaskTemplates.map((template) => template.id));
+  const defaultTaskTitles = new Set(executionTaskTemplates.map((template) => normalizeText(template.title)));
+  const customTasks = taskRows
+    .filter((row) => {
+      const taskKey = row.task_key ?? '';
+      const title = row.title ?? '';
+      return !defaultTaskKeys.has(taskKey) && !defaultTaskTitles.has(normalizeText(title));
+    })
+    .map((row) => ({
+      id: row.task_key ?? `custom-${row.id}`,
+      title: row.title,
+      status: mapDbExecutionTaskStatus(row.status),
+      responsible: row.responsible ?? '',
+      updatedAt: formatDateBR(row.updated_at),
+      protocol: row.protocol ?? '',
+      login: row.login ?? '',
+      password: row.password_ref ?? '',
+      observation: row.observation ?? '',
+      attachments: row.attachments ?? [],
+      suggestedDocuments: row.suggested_documents ?? []
+    }));
 
   const fieldChecklist = defaultFieldChecklist.map((template) => {
     const row = checklistRows.find((item) => item.item_key === template.id || item.title === template.title);
@@ -2260,7 +2281,7 @@ function mapDbExecutionToExecutionRecord(execution: DbExecution, process: Enviro
     dbId: execution.id,
     processDbId: execution.process_id,
     processId: process?.id ?? execution.process_id,
-    tasks,
+    tasks: [...tasks, ...customTasks],
     fieldChecklist,
     officeActions: [],
     fieldVisits: (execution.field_visits ?? []).map((visit) => ({
@@ -2958,26 +2979,44 @@ export function App() {
   async function attachClientDocuments(client: Client, fileItems: DocumentUploadItem[], category: string) {
     if (fileItems.length === 0) return;
     const relatedProcess = processes.find((process) => process.client === client.name);
-    const newDocuments = fileItems.map((item, index) => ({
-      id: 'DOC-' + String(documents.length + index + 1).padStart(3, '0'),
-      name: category,
-      category,
-      client: client.name,
-      propertyId: relatedProcess?.propertyId ?? '',
-      propertyName: relatedProcess?.property ?? 'Cadastro do cliente',
-      processId: relatedProcess?.id ?? '',
-      uploadedAt: new Date().toLocaleDateString('pt-BR'),
-      uploadedBy: 'Comercial',
-      fileName: getUploadFileName(item)
-    }));
-    setDocuments((current) => [...newDocuments, ...current]);
+    const savedDocuments: DocumentRecord[] = [];
 
     for (const item of fileItems) {
       if (typeof item === 'string') continue;
       const bucket = 'client-documents';
       const storagePath = `clients/${client.id}/${Date.now()}-${item.name}`;
-      await supabase.storage.from(bucket).upload(storagePath, item, { upsert: true });
-      await supabase.from('documents').insert({
+      console.info('[Documentos] Upload cliente - arquivo selecionado', {
+        file: item,
+        fileName: item.name,
+        size: item.size,
+        type: item.type,
+        bucket,
+        storagePath
+      });
+
+      const { error: uploadError } = await supabase.storage.from(bucket).upload(storagePath, item, {
+        upsert: true,
+        contentType: item.type || undefined
+      });
+
+      if (uploadError) {
+        console.error('[Documentos] Upload cliente - erro Supabase Storage', {
+          fileName: item.name,
+          bucket,
+          storagePath,
+          error: uploadError
+        });
+        window.alert(`Não foi possível enviar ${item.name} para o Supabase Storage.\n\n${uploadError.message}`);
+        continue;
+      }
+
+      console.info('[Documentos] Upload cliente - arquivo salvo no Storage', {
+        fileName: item.name,
+        bucket,
+        storagePath
+      });
+
+      const { data: insertedDocument, error: insertError } = await supabase.from('documents').insert({
         client_id: client.id,
         property_id: relatedProcess?.propertyId ?? null,
         process_id: relatedProcess?.dbId ?? null,
@@ -2989,7 +3028,39 @@ export function App() {
         mime_type: item.type || null,
         file_size: item.size,
         uploaded_by: 'Comercial'
+      }).select('*').single();
+
+      if (insertError || !insertedDocument) {
+        console.error('[Documentos] Upload cliente - erro ao salvar metadados', {
+          table: 'documents',
+          fileName: item.name,
+          bucket,
+          storagePath,
+          error: insertError
+        });
+        window.alert(`O arquivo ${item.name} foi enviado, mas os dados não foram salvos no banco.\n\n${insertError?.message ?? 'Erro desconhecido.'}`);
+        continue;
+      }
+
+      console.info('[Documentos] Upload cliente - metadados salvos', {
+        table: 'documents',
+        fileName: item.name,
+        bucket,
+        storagePath,
+        document: insertedDocument
       });
+
+      savedDocuments.push({
+        ...mapDbDocumentToDocument(insertedDocument as DbDocument, processes),
+        client: client.name,
+        propertyId: relatedProcess?.propertyId ?? '',
+        propertyName: relatedProcess?.property ?? 'Cadastro do cliente',
+        processId: relatedProcess?.id ?? ''
+      });
+    }
+
+    if (savedDocuments.length > 0) {
+      setDocuments((current) => [...savedDocuments, ...current]);
     }
   }
 
@@ -3611,8 +3682,78 @@ export function App() {
     setExecutionRecords((current) => {
       const baseRecord = current.find((record) => record.processId === processId) ?? { ...createDefaultExecutionRecord(processId), dbId: execution?.dbId, processDbId: process?.dbId };
       const currentTasks = baseRecord.tasks ?? createDefaultExecutionTasks();
-      const updatedTasks = currentTasks.map((item) => item.id === task.id ? task : item);
+      const updatedTasks = currentTasks.some((item) => item.id === task.id)
+        ? currentTasks.map((item) => item.id === task.id ? task : item)
+        : [...currentTasks, task];
       const updatedRecord = { ...baseRecord, tasks: updatedTasks, history: [historyItem, ...(baseRecord.history ?? [])] };
+      return current.some((record) => record.processId === processId)
+        ? current.map((record) => record.processId === processId ? updatedRecord : record)
+        : [updatedRecord, ...current];
+    });
+    if (execution?.dbId && process?.dbId) {
+      await refreshDashboard();
+    }
+  }
+
+  async function addCustomExecutionTask(processId: string, task: ExecutionTask) {
+    const execution = await ensureExecutionRecord(processId);
+    const process = processes.find((item) => item.id === processId);
+    const existingRecord = executionRecords.find((record) => record.processId === processId);
+    const existingTasks = existingRecord?.tasks ?? createDefaultExecutionTasks();
+    const hasDuplicate = existingTasks.some((item) => item.id === task.id || normalizeText(item.title) === normalizeText(task.title));
+
+    if (hasDuplicate) {
+      window.alert('Já existe uma etapa com esse nome neste processo.');
+      return;
+    }
+
+    const historyItem: ExecutionHistoryItem = {
+      id: `HIST-${processId}-${Date.now()}`,
+      date: task.updatedAt,
+      action: `Nova etapa criada: ${task.title}`,
+      responsible: task.responsible || 'Técnico escritório',
+      observation: 'Formulário personalizado adicionado à execução.'
+    };
+
+    if (execution?.dbId && process?.dbId) {
+      const payload = {
+        execution_id: execution.dbId,
+        process_id: process.dbId,
+        task_key: task.id,
+        title: task.title,
+        status: mapExecutionTaskStatusToDb(task.status),
+        responsible: task.responsible || null,
+        updated_at: formatDateToDb(task.updatedAt),
+        protocol: task.protocol || null,
+        login: task.login || null,
+        password_ref: task.password || null,
+        observation: task.observation || null,
+        attachments: task.attachments,
+        suggested_documents: task.suggestedDocuments
+      };
+
+      const { error } = await supabase.from('execution_tasks').insert(payload);
+      if (error) {
+        console.error('[Execução] Erro ao criar etapa personalizada no Supabase', {
+          table: 'execution_tasks',
+          processId,
+          payload,
+          error
+        });
+        window.alert(`Não foi possível criar a etapa no Supabase.\n\n${error.message}`);
+        return;
+      }
+
+      await saveExecutionHistory(processId, historyItem, execution);
+    }
+
+    setExecutionRecords((current) => {
+      const baseRecord = current.find((record) => record.processId === processId) ?? { ...createDefaultExecutionRecord(processId), dbId: execution?.dbId, processDbId: process?.dbId };
+      const updatedRecord = {
+        ...baseRecord,
+        tasks: [...(baseRecord.tasks ?? createDefaultExecutionTasks()), task],
+        history: [historyItem, ...(baseRecord.history ?? [])]
+      };
       return current.some((record) => record.processId === processId)
         ? current.map((record) => record.processId === processId ? updatedRecord : record)
         : [updatedRecord, ...current];
@@ -3841,12 +3982,7 @@ export function App() {
     <div className="app-shell">
       <aside className={menuOpen ? 'sidebar sidebar-open' : 'sidebar'}>
         <div className="brand">
-          <div className="brand-mark brand-image-mark">
-            <img src="/assets/logo-icon.png" alt="Anjos Ambiental" />
-          </div>
-          <div>
-            <strong>Anjos Ambiental</strong>
-          </div>
+          <img className="sidebar-brand-logo" src="/assets/logo-login.png" alt="Anjos Soluções Ambientais" />
         </div>
 
         <nav className="nav-list" aria-label="Navegação principal">
@@ -3953,6 +4089,7 @@ export function App() {
             onClose={() => setSelectedExecutionProcessId(null)}
             onAddOfficeAction={addOfficeAction}
             onAddFieldVisit={addFieldVisit}
+            onAddCustomTask={addCustomExecutionTask}
             onUpdateTask={updateExecutionTask}
             onUpdateNotes={updateExecutionNotes}
             onUpdateFieldChecklist={updateExecutionFieldChecklist}
@@ -6307,6 +6444,7 @@ function ExecutionView({
   onClose,
   onAddOfficeAction,
   onAddFieldVisit,
+  onAddCustomTask,
   onUpdateTask,
   onUpdateNotes,
   onUpdateFieldChecklist,
@@ -6324,6 +6462,7 @@ function ExecutionView({
   onClose: () => void;
   onAddOfficeAction: (processId: string, action: OfficeAction) => void;
   onAddFieldVisit: (processId: string, visit: FieldVisit) => void;
+  onAddCustomTask: (processId: string, task: ExecutionTask) => void;
   onUpdateTask: (processId: string, task: ExecutionTask) => void;
   onUpdateNotes: (processId: string, notes: string) => void;
   onUpdateFieldChecklist: (processId: string, item: FieldChecklistItem) => void;
@@ -6412,6 +6551,7 @@ function ExecutionView({
             onClose={onClose}
             onAddOfficeAction={onAddOfficeAction}
             onAddFieldVisit={onAddFieldVisit}
+            onAddCustomTask={onAddCustomTask}
             onUpdateTask={onUpdateTask}
             onUpdateNotes={onUpdateNotes}
             onUpdateFieldChecklist={onUpdateFieldChecklist}
@@ -6433,6 +6573,7 @@ function ExecutionModal({
   onClose,
   onAddOfficeAction,
   onAddFieldVisit,
+  onAddCustomTask,
   onUpdateTask,
   onUpdateNotes,
   onUpdateFieldChecklist,
@@ -6447,6 +6588,7 @@ function ExecutionModal({
   onClose: () => void;
   onAddOfficeAction: (processId: string, action: OfficeAction) => void;
   onAddFieldVisit: (processId: string, visit: FieldVisit) => void;
+  onAddCustomTask: (processId: string, task: ExecutionTask) => void;
   onUpdateTask: (processId: string, task: ExecutionTask) => void;
   onUpdateNotes: (processId: string, notes: string) => void;
   onUpdateFieldChecklist: (processId: string, item: FieldChecklistItem) => void;
@@ -6493,6 +6635,7 @@ function ExecutionModal({
           record={record}
           documents={documents}
           onAdd={onAddOfficeAction}
+          onAddCustomTask={onAddCustomTask}
           onUpdateTask={onUpdateTask}
           onUpdateNotes={onUpdateNotes}
           onAttachDocuments={onAttachDocuments}
@@ -6518,6 +6661,7 @@ function OfficeExecutionPanel({
   record,
   documents,
   onAdd,
+  onAddCustomTask,
   onUpdateTask,
   onUpdateNotes,
   onAttachDocuments,
@@ -6527,6 +6671,7 @@ function OfficeExecutionPanel({
   record: ExecutionRecord;
   documents: DocumentRecord[];
   onAdd: (processId: string, action: OfficeAction) => void;
+  onAddCustomTask: (processId: string, task: ExecutionTask) => void;
   onUpdateTask: (processId: string, task: ExecutionTask) => void;
   onUpdateNotes: (processId: string, notes: string) => void;
   onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
@@ -6536,6 +6681,7 @@ function OfficeExecutionPanel({
   const [filter, setFilter] = useState<'Todos' | 'Pendentes' | 'Em andamento' | 'Aguardando aprovação' | 'Concluídos' | 'Rejeitados'>('Todos');
   const [selectedTaskId, setSelectedTaskId] = useState(tasks[0]?.id ?? '');
   const [editingTask, setEditingTask] = useState<ExecutionTask | null>(null);
+  const [isAddingTask, setIsAddingTask] = useState(false);
   const [internalNotes, setInternalNotes] = useState(record.internalNotes ?? '');
   const [form, setForm] = useState<OfficeAction>({
     type: '',
@@ -6610,6 +6756,9 @@ function OfficeExecutionPanel({
           {(['Todos', 'Pendentes', 'Em andamento', 'Aguardando aprovação', 'Concluídos', 'Rejeitados'] as const).map((item) => (
             <button className={filter === item ? 'filter-chip active' : 'filter-chip'} type="button" onClick={() => setFilter(item)} key={item}>{item}</button>
           ))}
+          <button className="filter-chip execution-add-task-button" type="button" onClick={() => setIsAddingTask(true)}>
+            <FilePlus size={15} /> Nova etapa
+          </button>
         </div>
 
         <div className="execution-task-grid">
@@ -6718,7 +6867,78 @@ function OfficeExecutionPanel({
           />
         </div>
       ) : null}
+      {isAddingTask ? (
+        <div className="modal-backdrop nested-modal">
+          <CustomExecutionTaskModal
+            existingTasks={tasks}
+            onClose={() => setIsAddingTask(false)}
+            onSave={(task) => {
+              onAddCustomTask(process.id, task);
+              setSelectedTaskId(task.id);
+              setIsAddingTask(false);
+            }}
+          />
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function CustomExecutionTaskModal({
+  existingTasks,
+  onClose,
+  onSave
+}: {
+  existingTasks: ExecutionTask[];
+  onClose: () => void;
+  onSave: (task: ExecutionTask) => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [error, setError] = useState('');
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      setError('Informe o nome da etapa.');
+      return;
+    }
+    if (existingTasks.some((task) => normalizeText(task.title) === normalizeText(trimmedTitle))) {
+      setError('Já existe uma etapa com esse nome neste processo.');
+      return;
+    }
+
+    onSave({
+      id: createCustomExecutionTaskId(trimmedTitle),
+      title: trimmedTitle,
+      status: 'Não iniciado',
+      responsible: 'Técnico escritório',
+      updatedAt: new Date().toLocaleDateString('pt-BR'),
+      protocol: '',
+      login: '',
+      password: '',
+      observation: '',
+      attachments: [],
+      suggestedDocuments: []
+    });
+  }
+
+  return (
+    <form className="panel modal-card custom-execution-task-modal" onSubmit={submit}>
+      <div className="form-heading">
+        <div>
+          <p className="eyebrow">Formulário personalizado</p>
+          <h2>Nova etapa</h2>
+        </div>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar nova etapa"><X size={18} /></button>
+      </div>
+      <label>Nome da etapa/formulário<input value={title} onChange={(event) => { setTitle(event.target.value); setError(''); }} placeholder="Licença de Operação" autoFocus /></label>
+      {error ? <p className="form-error-text">{error}</p> : null}
+      <div className="form-actions">
+        <button className="secondary-light-button" type="button" onClick={onClose}>Cancelar</button>
+        <button className="primary-button dark" type="submit">Salvar etapa</button>
+      </div>
+    </form>
   );
 }
 
