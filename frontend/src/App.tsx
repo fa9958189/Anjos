@@ -484,9 +484,8 @@ type DbDocument = {
   category: string;
   name: string | null;
   file_name: string;
-  bucket_name: string | null;
-  storage_path: string | null;
-  mime_type: string | null;
+  file_path: string | null;
+  file_type: string | null;
   file_size: number | null;
   uploaded_by: string | null;
   uploaded_at: string | null;
@@ -2201,13 +2200,33 @@ function mapDbFieldVisitStatus(status: string | null): FieldVisit['status'] {
   return status ? statusMap[status] ?? 'Agendada' : 'Agendada';
 }
 
+const knownDocumentBuckets = ['client-documents', 'process-documents', 'execution-files'];
+
+function buildStoredDocumentPath(bucket: string, storagePath: string) {
+  return `${bucket}/${storagePath}`;
+}
+
+function parseStoredDocumentPath(filePath?: string | null) {
+  if (!filePath) return { bucket: undefined, storagePath: undefined };
+  const normalizedPath = filePath.replace(/^\/+/, '');
+  const bucket = knownDocumentBuckets.find((item) => normalizedPath === item || normalizedPath.startsWith(`${item}/`));
+  if (bucket) {
+    return {
+      bucket,
+      storagePath: normalizedPath.slice(bucket.length + 1)
+    };
+  }
+  return { bucket: undefined, storagePath: normalizedPath };
+}
+
 function mapDbDocumentToDocument(document: DbDocument, processes: EnvironmentalProcess[]): DocumentRecord {
   const linkedProcess = processes.find((process) => process.dbId === document.process_id || process.id === document.processes?.process_number);
+  const storageLocation = parseStoredDocumentPath(document.file_path);
   return {
     dbId: document.id,
-    bucket: document.bucket_name ?? undefined,
-    storagePath: document.storage_path ?? undefined,
-    mimeType: document.mime_type ?? undefined,
+    bucket: storageLocation.bucket,
+    storagePath: storageLocation.storagePath,
+    mimeType: document.file_type ?? undefined,
     fileSize: document.file_size ?? undefined,
     id: document.id,
     name: document.name ?? document.category,
@@ -3023,9 +3042,8 @@ export function App() {
         category,
         name: category,
         file_name: item.name,
-        bucket_name: bucket,
-        storage_path: storagePath,
-        mime_type: item.type || null,
+        file_path: buildStoredDocumentPath(bucket, storagePath),
+        file_type: item.type || null,
         file_size: item.size,
         uploaded_by: 'Comercial'
       }).select('*').single();
@@ -3078,11 +3096,33 @@ export function App() {
 
       if (typeof item !== 'string' && process.dbId) {
         storagePath = `processes/${process.dbId}/${normalizeText(category).replace(/\s+/g, '-')}/${Date.now()}-${item.name}`;
-        const { error: uploadError } = await supabase.storage.from(bucket).upload(storagePath, item, { upsert: true });
+        console.info('[Documentos] Upload processo - arquivo selecionado', {
+          file: item,
+          fileName: item.name,
+          size: item.size,
+          type: item.type,
+          bucket,
+          storagePath
+        });
+        const { error: uploadError } = await supabase.storage.from(bucket).upload(storagePath, item, {
+          upsert: true,
+          contentType: item.type || undefined
+        });
         if (uploadError) {
-          window.alert('Não foi possível enviar o arquivo para o Supabase Storage. Tente novamente.');
+          console.error('[Documentos] Upload processo - erro Supabase Storage', {
+            fileName: item.name,
+            bucket,
+            storagePath,
+            error: uploadError
+          });
+          window.alert(`Não foi possível enviar o arquivo para o Supabase Storage.\n\n${uploadError.message}`);
           continue;
         }
+        console.info('[Documentos] Upload processo - arquivo salvo no Storage', {
+          fileName: item.name,
+          bucket,
+          storagePath
+        });
         mimeType = item.type;
         fileSize = item.size;
       }
@@ -3097,9 +3137,8 @@ export function App() {
             category,
             name: category,
             file_name: fileName,
-            bucket_name: storagePath ? bucket : null,
-            storage_path: storagePath || null,
-            mime_type: mimeType || null,
+            file_path: storagePath ? buildStoredDocumentPath(bucket, storagePath) : null,
+            file_type: mimeType || null,
             file_size: fileSize || null,
             uploaded_by: 'Técnico escritório'
           })
@@ -3108,6 +3147,23 @@ export function App() {
 
         if (!documentError && insertedDocument) {
           dbId = (insertedDocument as DbDocument).id;
+          console.info('[Documentos] Upload processo - metadados salvos', {
+            table: 'documents',
+            fileName,
+            bucket,
+            storagePath,
+            document: insertedDocument
+          });
+        } else if (documentError) {
+          console.error('[Documentos] Upload processo - erro ao salvar metadados', {
+            table: 'documents',
+            fileName,
+            bucket,
+            storagePath,
+            error: documentError
+          });
+          window.alert(`O arquivo ${fileName} foi enviado, mas os dados não foram salvos no banco.\n\n${documentError.message}`);
+          continue;
         }
       }
 
