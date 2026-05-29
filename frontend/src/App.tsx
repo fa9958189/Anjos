@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, MouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { supabase } from './lib/supabase';
 
@@ -4222,6 +4222,9 @@ const institutionalServices = [
   'Acompanhamento de Processos'
 ];
 
+const landingParticles = Array.from({ length: 22 }, (_, index) => index);
+const landingLeaves = Array.from({ length: 14 }, (_, index) => index);
+
 function WhatsAppFloatingButton() {
   return (
     <a className="whatsapp-floating-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer" aria-label="Falar no WhatsApp">
@@ -4231,11 +4234,31 @@ function WhatsAppFloatingButton() {
 }
 
 function LandingPage() {
+  function updateHeroParallax(event: MouseEvent<HTMLElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+    event.currentTarget.style.setProperty('--parallax-x', x.toFixed(3));
+    event.currentTarget.style.setProperty('--parallax-y', y.toFixed(3));
+  }
+
   return (
     <main className="landing-page">
+      <div className="landing-atmosphere" aria-hidden="true">
+        <div className="landing-tree">
+          <span className="tree-trunk" />
+          <span className="tree-crown tree-crown-one" />
+          <span className="tree-crown tree-crown-two" />
+          <span className="tree-crown tree-crown-three" />
+          <span className="tree-crown tree-crown-four" />
+        </div>
+        <div className="atmosphere-fog atmosphere-fog-one" />
+        <div className="atmosphere-fog atmosphere-fog-two" />
+      </div>
+
       <nav className="landing-nav" aria-label="Navegação institucional">
         <a className="landing-logo-link" href="/" aria-label="Anjos Ambiental">
-          <img src="/assets/logo-login.png" alt="Anjos Soluções Ambientais" />
+          <img src="/assets/Logotipo-Anjos-sem-tag-V3.png" alt="Anjos Soluções Ambientais" />
         </a>
         <div>
           <a href="#servicos">Serviços</a>
@@ -4244,7 +4267,18 @@ function LandingPage() {
         </div>
       </nav>
 
-      <section className="landing-hero">
+      <section className="landing-hero" onMouseMove={updateHeroParallax}>
+        <div className="landing-cinematic-scene" aria-hidden="true">
+          <div className="landing-particle-field">
+            {landingParticles.map((item) => <span key={`particle-${item}`} />)}
+          </div>
+          <div className="landing-leaf-field">
+            {landingLeaves.map((item) => <span key={`leaf-${item}`} />)}
+          </div>
+          <div className="landing-a-orbit">
+            <img src="/assets/Letra-A-Anjos-V1.png" alt="" />
+          </div>
+        </div>
         <div className="landing-hero-content">
           <h1>Soluções completas em licenciamento, regularização e gestão ambiental.</h1>
           <p>Atuamos na regularização ambiental de propriedades rurais, empresas e empreendimentos, oferecendo acompanhamento técnico especializado e gestão digital dos processos.</p>
@@ -4252,29 +4286,18 @@ function LandingPage() {
             <a className="landing-primary-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer">Entrar em contato</a>
           </div>
         </div>
-        <div className="landing-hero-panel" aria-hidden="true">
-          <div>
-            <span>Licenciamento</span>
-            <strong>Gestão ambiental integrada</strong>
-          </div>
-          <div>
-            <span>Documentos</span>
-            <strong>Processos organizados online</strong>
-          </div>
-          <div>
-            <span>Protocolos</span>
-            <strong>Acompanhamento técnico contínuo</strong>
-          </div>
-        </div>
       </section>
 
       <section className="landing-section landing-about">
-        <div>
+        <div className="landing-video-card">
+          <video src="/assets/Vídeo Anjos (2).mp4" autoPlay muted loop playsInline />
+        </div>
+        <div className="landing-about-copy">
           <p className="landing-eyebrow">Quem Somos</p>
           <h2>Quem Somos</h2>
+          <p>A Anjos Ambiental é especializada em consultoria e gestão ambiental, auxiliando produtores rurais, empresas e empreendedores na regularização de seus projetos e no cumprimento das exigências ambientais.</p>
+          <p>Nossa missão é oferecer soluções técnicas com organização, transparência e agilidade.</p>
         </div>
-        <p>A Anjos Ambiental é especializada em consultoria e gestão ambiental, auxiliando produtores rurais, empresas e empreendedores na regularização de seus projetos e no cumprimento das exigências ambientais.</p>
-        <p>Nossa missão é oferecer soluções técnicas com organização, transparência e agilidade.</p>
       </section>
 
       <section className="landing-section" id="servicos">
@@ -4285,7 +4308,7 @@ function LandingPage() {
         <div className="landing-services-grid">
           {institutionalServices.map((service) => (
             <article className="landing-service-card" key={service}>
-              <FileText size={22} />
+              <span className="landing-service-icon"><FileText size={22} /></span>
               <strong>{service}</strong>
             </article>
           ))}
@@ -4304,7 +4327,7 @@ function LandingPage() {
       </section>
 
       <footer className="landing-footer">
-        <img src="/assets/logo-login.png" alt="Anjos Soluções Ambientais" />
+        <img src="/assets/Logotipo-Anjos-sem-tag-V3.png" alt="Anjos Soluções Ambientais" />
         <div>
           <strong>Anjos Ambiental</strong>
           <span>Soluções Ambientais e Gestão de Processos</span>
