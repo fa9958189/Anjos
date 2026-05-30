@@ -170,6 +170,52 @@ a { color: inherit; text-decoration: none; }
   pointer-events: none;
   will-change: transform;
 }
+.forest-leaf-trail {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
+.forest-cursor-glow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: clamp(190px, 24vw, 320px);
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(48, 193, 117, 0.18), rgba(4, 135, 57, 0.08) 36%, transparent 68%);
+  filter: blur(18px);
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+.forest-cursor-leaves {
+  position: absolute;
+  inset: 0;
+}
+.forest-cursor-leaves span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 14px;
+  height: 8px;
+  border-radius: 80% 0 80% 0;
+  background: linear-gradient(135deg, rgba(48, 193, 117, 0.72), rgba(4, 135, 57, 0.55));
+  opacity: 0;
+  filter: drop-shadow(0 0 10px rgba(48, 193, 117, 0.25));
+  will-change: transform, opacity;
+}
+.forest-cursor-leaves span:nth-child(3n) {
+  width: 9px;
+  height: 6px;
+  background: rgba(48, 193, 117, 0.44);
+}
+.forest-cursor-leaves span:nth-child(4n) {
+  width: 18px;
+  height: 10px;
+  background: rgba(234, 233, 229, 0.26);
+}
 .landing-particles {
   position: absolute;
   inset: 0;
@@ -228,7 +274,7 @@ a { color: inherit; text-decoration: none; }
 .landing-hero-content,
 .landing-hero-panel {
   position: relative;
-  z-index: 2;
+  z-index: 4;
   animation: landingRise 780ms ease-out both;
 }
 .landing-hero-content {
@@ -691,6 +737,9 @@ a { color: inherit; text-decoration: none; }
     grid-template-columns: 1fr;
   }
   .landing-particles span:nth-child(n + 10) {
+    display: none;
+  }
+  .forest-leaf-trail {
     display: none;
   }
   .landing-leaves span:nth-child(n + 4) {
@@ -1187,6 +1236,7 @@ a { color: inherit; text-decoration: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .landing-page *,
+  .forest-leaf-trail,
   .login-shell,
   .login-particles span,
   .login-submit,

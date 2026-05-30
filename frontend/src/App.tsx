@@ -31,11 +31,12 @@ import {
   X
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { useGSAP } from '@gsap/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import Lenis from 'lenis';
-import { ChangeEvent, FormEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { supabase } from './lib/supabase';
 
@@ -4314,8 +4315,157 @@ function WhatsAppFloatingButton() {
   );
 }
 
+function ForestLeafTrail({ heroRef }: { heroRef: RefObject<HTMLElement | null> }) {
+  const layerRef = useRef<HTMLDivElement | null>(null);
+  const glowRef = useRef<HTMLDivElement | null>(null);
+  const leavesRef = useRef<HTMLSpanElement[]>([]);
+
+  useGSAP(
+    () => {
+      const hero = heroRef.current;
+      const layer = layerRef.current;
+      const glow = glowRef.current;
+      const forest = hero?.querySelector<HTMLElement>('.landing-hero-forest');
+      const vegetation = hero?.querySelector<HTMLElement>('.landing-vegetation-layer');
+      const leaves = leavesRef.current.filter(Boolean);
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const isTouch = window.matchMedia('(pointer: coarse)').matches;
+
+      if (!hero || !layer || !glow || !forest || !vegetation || reducedMotion || isTouch) return;
+
+      gsap.set(layer, { opacity: 0 });
+      gsap.set(leaves, { opacity: 0, x: -100, y: -100 });
+
+      const glowX = gsap.quickTo(glow, 'x', { duration: 0.35, ease: 'power3.out' });
+      const glowY = gsap.quickTo(glow, 'y', { duration: 0.35, ease: 'power3.out' });
+      const forestX = gsap.quickTo(forest, 'x', { duration: 0.8, ease: 'power3.out' });
+      const forestY = gsap.quickTo(forest, 'y', { duration: 0.8, ease: 'power3.out' });
+      const vegetationX = gsap.quickTo(vegetation, 'x', { duration: 0.9, ease: 'power3.out' });
+      const vegetationY = gsap.quickTo(vegetation, 'y', { duration: 0.9, ease: 'power3.out' });
+      const vegetationRotate = gsap.quickTo(vegetation, 'rotation', { duration: 0.9, ease: 'power3.out' });
+
+      let leafIndex = 0;
+      let frame = 0;
+      let lastX = Number.NaN;
+      let lastY = Number.NaN;
+      let lastTime = 0;
+      let latestEvent: globalThis.MouseEvent | null = null;
+
+      const spawnLeaf = (x: number, y: number) => {
+        const leaf = leaves[leafIndex % leaves.length];
+        leafIndex += 1;
+        if (!leaf) return;
+
+        const direction = Math.random() > 0.5 ? 1 : -1;
+        const endX = x + direction * (48 + Math.random() * 96);
+        const endY = y - 72 + Math.random() * 130;
+        const scale = 0.5 + Math.random() * 0.7;
+
+        gsap.killTweensOf(leaf);
+        gsap.set(leaf, {
+          x: x + (Math.random() * 18 - 9),
+          y: y + (Math.random() * 18 - 9),
+          scale,
+          rotate: Math.random() * 80 - 40,
+          opacity: 0
+        });
+        gsap.timeline()
+          .to(leaf, {
+            opacity: 0.62,
+            duration: 0.18,
+            ease: 'power2.out'
+          })
+          .to(leaf, {
+            x: endX,
+            y: endY,
+            rotate: direction * (80 + Math.random() * 180),
+            opacity: 0,
+            duration: 0.8 + Math.random() * 0.65,
+            ease: 'power3.out'
+          }, '<');
+      };
+
+      const handleEnter = () => {
+        gsap.to(layer, { opacity: 1, duration: 0.28, ease: 'power2.out' });
+      };
+
+      const handleMove = (event: globalThis.MouseEvent) => {
+        latestEvent = event;
+        if (frame) return;
+
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          if (!latestEvent) return;
+
+          const bounds = hero.getBoundingClientRect();
+          const x = latestEvent.clientX - bounds.left;
+          const y = latestEvent.clientY - bounds.top;
+          const normalizedX = x / bounds.width - 0.5;
+          const normalizedY = y / bounds.height - 0.5;
+
+          glowX(x - 150);
+          glowY(y - 150);
+          forestX(normalizedX * -10);
+          forestY(normalizedY * -8);
+          vegetationX(normalizedX * 10);
+          vegetationY(normalizedY * 7);
+          vegetationRotate(normalizedX * 0.55);
+
+          const distance = Number.isNaN(lastX) ? 999 : Math.hypot(x - lastX, y - lastY);
+          const now = performance.now();
+          if (distance > 24 || now - lastTime > 115) {
+            spawnLeaf(x, y);
+            lastX = x;
+            lastY = y;
+            lastTime = now;
+          }
+        });
+      };
+
+      const handleLeave = () => {
+        gsap.to(layer, { opacity: 0, duration: 0.42, ease: 'power2.out' });
+        forestX(0);
+        forestY(0);
+        vegetationX(0);
+        vegetationY(0);
+        vegetationRotate(0);
+      };
+
+      hero.addEventListener('mouseenter', handleEnter);
+      hero.addEventListener('mousemove', handleMove);
+      hero.addEventListener('mouseleave', handleLeave);
+
+      return () => {
+        hero.removeEventListener('mouseenter', handleEnter);
+        hero.removeEventListener('mousemove', handleMove);
+        hero.removeEventListener('mouseleave', handleLeave);
+        if (frame) cancelAnimationFrame(frame);
+        gsap.killTweensOf([layer, glow, forest, vegetation, ...leaves]);
+      };
+    },
+    { scope: layerRef, dependencies: [heroRef] }
+  );
+
+  return (
+    <div className="forest-leaf-trail" ref={layerRef} aria-hidden="true">
+      <div className="forest-cursor-glow" ref={glowRef} />
+      <div className="forest-cursor-leaves">
+        {Array.from({ length: 16 }, (_, index) => (
+          <span
+            key={index}
+            ref={(node) => {
+              if (node) leavesRef.current[index] = node;
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function LandingPage() {
   const landingRef = useRef<HTMLElement | null>(null);
+  const heroRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const root = landingRef.current;
@@ -4395,63 +4545,6 @@ function LandingPage() {
     };
   }, []);
 
-  function updateHeroParallax(event: MouseEvent<HTMLElement>) {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
-    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-    const forest = event.currentTarget.querySelector('.landing-hero-forest');
-    const glow = event.currentTarget.querySelector('.landing-ambient-orb');
-    const vegetation = event.currentTarget.querySelector('.landing-vegetation-layer');
-
-    gsap.to(forest, {
-      x: x * -14,
-      y: y * -10,
-      scale: 1.055,
-      duration: 0.8,
-      ease: 'power3.out'
-    });
-    gsap.to(glow, {
-      x: x * 42,
-      y: y * 32,
-      duration: 0.7,
-      ease: 'power3.out'
-    });
-    gsap.to(vegetation, {
-      x: x * 12,
-      y: y * 8,
-      rotate: x * 0.6,
-      duration: 0.9,
-      ease: 'power3.out'
-    });
-  }
-
-  function resetHeroParallax(event: MouseEvent<HTMLElement>) {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-    gsap.to(event.currentTarget.querySelector('.landing-hero-forest'), {
-      x: 0,
-      y: 0,
-      scale: 1.045,
-      duration: 1,
-      ease: 'power3.out'
-    });
-    gsap.to(event.currentTarget.querySelector('.landing-ambient-orb'), {
-      x: 0,
-      y: 0,
-      duration: 1,
-      ease: 'power3.out'
-    });
-    gsap.to(event.currentTarget.querySelector('.landing-vegetation-layer'), {
-      x: 0,
-      y: 0,
-      rotate: 0,
-      duration: 1,
-      ease: 'power3.out'
-    });
-  }
-
   return (
     <main className="landing-page" ref={landingRef}>
       <nav className="landing-nav" aria-label="Navegação institucional">
@@ -4466,11 +4559,12 @@ function LandingPage() {
         </div>
       </nav>
 
-      <section className="landing-hero" onMouseMove={updateHeroParallax} onMouseLeave={resetHeroParallax}>
+      <section className="landing-hero" ref={heroRef}>
         <div className="landing-hero-forest" aria-hidden="true" />
         <div className="landing-hero-overlay" aria-hidden="true" />
         <div className="landing-vegetation-layer" aria-hidden="true" />
         <div className="landing-ambient-orb" aria-hidden="true" />
+        <ForestLeafTrail heroRef={heroRef} />
         <div className="landing-particles" aria-hidden="true">
           {Array.from({ length: 18 }, (_, index) => <span key={index} />)}
         </div>
