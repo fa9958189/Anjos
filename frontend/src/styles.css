@@ -90,8 +90,6 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 0 28px rgba(48, 193, 117, 0.25);
 }
 .landing-hero {
-  --forest-x: 50%;
-  --forest-y: 50%;
   position: relative;
   min-height: 100svh;
   display: grid;
@@ -100,14 +98,44 @@ a { color: inherit; text-decoration: none; }
   align-items: end;
   padding: clamp(132px, 16vw, 190px) clamp(18px, 5vw, 72px) clamp(72px, 9vw, 118px);
   overflow: hidden;
-  background-image:
-    linear-gradient(90deg, rgba(8, 26, 22, 0.92) 0%, rgba(8, 26, 22, 0.66) 42%, rgba(8, 26, 22, 0.32) 100%),
-    linear-gradient(180deg, rgba(8, 26, 22, 0.28), rgba(8, 26, 22, 0.92)),
-    url('/assets/Capa Reels.png');
+  background: #081A16;
+  color: #ffffff;
+}
+.landing-hero-forest,
+.landing-hero-overlay,
+.landing-vegetation-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.landing-hero-forest {
+  inset: -18px;
+  z-index: 0;
+  background-image: url('/assets/Capa Reels.png');
   background-repeat: no-repeat;
   background-size: cover;
-  background-position: center, center, var(--forest-x) var(--forest-y);
-  color: #ffffff;
+  background-position: center top;
+  filter: saturate(1.08) contrast(1.06) brightness(0.78);
+  transform: scale(1.045);
+  will-change: transform;
+}
+.landing-hero-overlay {
+  z-index: 1;
+  background:
+    linear-gradient(90deg, rgba(8, 26, 22, 0.93) 0%, rgba(8, 26, 22, 0.72) 44%, rgba(8, 26, 22, 0.48) 100%),
+    linear-gradient(180deg, rgba(8, 26, 22, 0.12), rgba(8, 26, 22, 0.9));
+}
+.landing-vegetation-layer {
+  z-index: 1;
+  opacity: 0.52;
+  background:
+    radial-gradient(ellipse at 16% 72%, rgba(48, 193, 117, 0.13), transparent 26rem),
+    radial-gradient(ellipse at 78% 28%, rgba(4, 135, 57, 0.11), transparent 22rem),
+    linear-gradient(110deg, transparent 18%, rgba(234, 233, 229, 0.055) 29%, transparent 42%);
+  filter: blur(0.2px);
+  animation: landingVegetationBreath 8s ease-in-out infinite alternate;
+  transform-origin: center;
+  will-change: transform;
 }
 .landing-hero::before {
   content: "";
@@ -118,6 +146,7 @@ a { color: inherit; text-decoration: none; }
     radial-gradient(circle at 74% 34%, rgba(48, 193, 117, 0.24), transparent 22rem),
     linear-gradient(120deg, transparent 18%, rgba(234, 233, 229, 0.08) 28%, transparent 38%);
   mix-blend-mode: screen;
+  z-index: 1;
 }
 .landing-hero::after {
   content: "";
@@ -126,6 +155,7 @@ a { color: inherit; text-decoration: none; }
   height: 34%;
   pointer-events: none;
   background: linear-gradient(180deg, transparent, #081A16);
+  z-index: 1;
 }
 .landing-ambient-orb {
   position: absolute;
@@ -138,6 +168,7 @@ a { color: inherit; text-decoration: none; }
   background: radial-gradient(circle, rgba(48, 193, 117, 0.24), rgba(4, 135, 57, 0.1) 34%, transparent 68%);
   filter: blur(18px);
   pointer-events: none;
+  will-change: transform;
 }
 .landing-particles {
   position: absolute;
@@ -561,6 +592,16 @@ a { color: inherit; text-decoration: none; }
     opacity: 0.78;
   }
 }
+@keyframes landingVegetationBreath {
+  from {
+    opacity: 0.42;
+    transform: translate3d(-4px, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0.58;
+    transform: translate3d(6px, -5px, 0) scale(1.012);
+  }
+}
 @media (max-width: 980px) {
   .landing-nav {
     position: absolute;
@@ -576,6 +617,10 @@ a { color: inherit; text-decoration: none; }
     grid-template-columns: 1fr;
     min-height: auto;
     padding-top: 190px;
+  }
+  .landing-hero-forest {
+    background-position: center top;
+    background-size: cover;
   }
   .landing-hero-panel {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -613,6 +658,13 @@ a { color: inherit; text-decoration: none; }
   }
   .landing-hero {
     padding-top: 220px;
+  }
+  .landing-hero-forest {
+    background-size: auto 250%;
+    background-position: center top;
+  }
+  .landing-vegetation-layer {
+    opacity: 0.34;
   }
   .landing-hero h1 {
     font-size: clamp(2.65rem, 14vw, 4.2rem);

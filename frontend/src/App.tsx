@@ -4396,11 +4396,60 @@ function LandingPage() {
   }, []);
 
   function updateHeroParallax(event: MouseEvent<HTMLElement>) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - bounds.left) / bounds.width - 0.5;
     const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-    event.currentTarget.style.setProperty('--forest-x', `${50 + x * 2}%`);
-    event.currentTarget.style.setProperty('--forest-y', `${50 + y * 2}%`);
+    const forest = event.currentTarget.querySelector('.landing-hero-forest');
+    const glow = event.currentTarget.querySelector('.landing-ambient-orb');
+    const vegetation = event.currentTarget.querySelector('.landing-vegetation-layer');
+
+    gsap.to(forest, {
+      x: x * -14,
+      y: y * -10,
+      scale: 1.055,
+      duration: 0.8,
+      ease: 'power3.out'
+    });
+    gsap.to(glow, {
+      x: x * 42,
+      y: y * 32,
+      duration: 0.7,
+      ease: 'power3.out'
+    });
+    gsap.to(vegetation, {
+      x: x * 12,
+      y: y * 8,
+      rotate: x * 0.6,
+      duration: 0.9,
+      ease: 'power3.out'
+    });
+  }
+
+  function resetHeroParallax(event: MouseEvent<HTMLElement>) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    gsap.to(event.currentTarget.querySelector('.landing-hero-forest'), {
+      x: 0,
+      y: 0,
+      scale: 1.045,
+      duration: 1,
+      ease: 'power3.out'
+    });
+    gsap.to(event.currentTarget.querySelector('.landing-ambient-orb'), {
+      x: 0,
+      y: 0,
+      duration: 1,
+      ease: 'power3.out'
+    });
+    gsap.to(event.currentTarget.querySelector('.landing-vegetation-layer'), {
+      x: 0,
+      y: 0,
+      rotate: 0,
+      duration: 1,
+      ease: 'power3.out'
+    });
   }
 
   return (
@@ -4417,7 +4466,10 @@ function LandingPage() {
         </div>
       </nav>
 
-      <section className="landing-hero" onMouseMove={updateHeroParallax}>
+      <section className="landing-hero" onMouseMove={updateHeroParallax} onMouseLeave={resetHeroParallax}>
+        <div className="landing-hero-forest" aria-hidden="true" />
+        <div className="landing-hero-overlay" aria-hidden="true" />
+        <div className="landing-vegetation-layer" aria-hidden="true" />
         <div className="landing-ambient-orb" aria-hidden="true" />
         <div className="landing-particles" aria-hidden="true">
           {Array.from({ length: 18 }, (_, index) => <span key={index} />)}
