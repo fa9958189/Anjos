@@ -4247,6 +4247,23 @@ const institutionalServices = [
 
 type LandingService = (typeof institutionalServices)[number];
 
+const fallingLeaves = [
+  { start: '6vw', drift: '26px', final: '-34px', size: '9px', scale: '0.86', duration: '18s', delay: '-3s', opacity: '0.42', color: 'rgba(48, 193, 117, 0.62)' },
+  { start: '13vw', drift: '-18px', final: '44px', size: '12px', scale: '0.92', duration: '22s', delay: '-11s', opacity: '0.5', color: 'rgba(4, 135, 57, 0.58)' },
+  { start: '21vw', drift: '42px', final: '8px', size: '8px', scale: '0.78', duration: '16s', delay: '-7s', opacity: '0.38', color: 'rgba(48, 193, 117, 0.48)' },
+  { start: '29vw', drift: '-34px', final: '-70px', size: '14px', scale: '0.88', duration: '24s', delay: '-15s', opacity: '0.44', color: 'rgba(4, 135, 57, 0.52)' },
+  { start: '37vw', drift: '18px', final: '58px', size: '10px', scale: '1', duration: '19s', delay: '-5s', opacity: '0.48', color: 'rgba(48, 193, 117, 0.58)' },
+  { start: '45vw', drift: '-46px', final: '-10px', size: '11px', scale: '0.82', duration: '21s', delay: '-13s', opacity: '0.36', color: 'rgba(4, 135, 57, 0.48)' },
+  { start: '53vw', drift: '52px', final: '82px', size: '13px', scale: '0.96', duration: '25s', delay: '-20s', opacity: '0.45', color: 'rgba(48, 193, 117, 0.54)' },
+  { start: '61vw', drift: '-22px', final: '-54px', size: '7px', scale: '0.74', duration: '17s', delay: '-9s', opacity: '0.32', color: 'rgba(48, 193, 117, 0.45)' },
+  { start: '68vw', drift: '34px', final: '18px', size: '15px', scale: '0.9', duration: '23s', delay: '-16s', opacity: '0.4', color: 'rgba(4, 135, 57, 0.55)' },
+  { start: '74vw', drift: '-58px', final: '-26px', size: '10px', scale: '0.84', duration: '20s', delay: '-2s', opacity: '0.36', color: 'rgba(48, 193, 117, 0.5)' },
+  { start: '80vw', drift: '24px', final: '66px', size: '12px', scale: '0.98', duration: '26s', delay: '-18s', opacity: '0.46', color: 'rgba(4, 135, 57, 0.5)' },
+  { start: '87vw', drift: '-30px', final: '-74px', size: '9px', scale: '0.8', duration: '18s', delay: '-12s', opacity: '0.34', color: 'rgba(48, 193, 117, 0.44)' },
+  { start: '92vw', drift: '20px', final: '-16px', size: '11px', scale: '0.9', duration: '22s', delay: '-6s', opacity: '0.38', color: 'rgba(4, 135, 57, 0.46)' },
+  { start: '96vw', drift: '-42px', final: '-88px', size: '8px', scale: '0.72', duration: '19s', delay: '-14s', opacity: '0.3', color: 'rgba(48, 193, 117, 0.4)' }
+];
+
 function AnimatedServiceCard({ service }: { service: LandingService }) {
   return (
     <article className="landing-service-card landing-reveal">
@@ -4256,6 +4273,30 @@ function AnimatedServiceCard({ service }: { service: LandingService }) {
         <p>{service.description}</p>
       </div>
     </article>
+  );
+}
+
+function ForestFallingLeaves() {
+  return (
+    <div className="falling-leaves" aria-hidden="true">
+      {fallingLeaves.map((leaf, index) => (
+        <span
+          className="leaf"
+          key={`${leaf.start}-${index}`}
+          style={{
+            '--start-x': leaf.start,
+            '--drift-x': leaf.drift,
+            '--drift-x-final': leaf.final,
+            '--size': leaf.size,
+            '--scale': leaf.scale,
+            '--duration': leaf.duration,
+            '--delay': leaf.delay,
+            '--opacity': leaf.opacity,
+            '--leaf-color': leaf.color
+          } as Record<string, string>}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -4355,6 +4396,7 @@ function LandingPage() {
       </nav>
 
       <section className="landing-hero hero-image-1">
+        <ForestFallingLeaves />
         <div className="landing-hero-content">
           <p className="landing-eyebrow">Tecnologia ambiental e regularização</p>
           <h1>Regularização Ambiental com Segurança e Agilidade</h1>
@@ -4379,8 +4421,9 @@ function LandingPage() {
           </div>
         </div>
       </section>
-      <section className="forest-panel forest-image-2" aria-label="Paisagem ambiental em sequência" />
-      <section className="forest-panel forest-image-3" aria-label="Paisagem ambiental final" />
+      <section className="forest-panel forest-image-2" aria-label="Paisagem ambiental em sequência">
+        <ForestFallingLeaves />
+      </section>
 
       <section className="landing-section landing-about landing-reveal" id="quem-somos">
         <div className="landing-about-media" aria-hidden="true">

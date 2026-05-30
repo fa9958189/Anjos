@@ -121,13 +121,8 @@ a { color: inherit; text-decoration: none; }
 }
 .forest-image-2 {
   background-image:
-    linear-gradient(180deg, rgba(3, 18, 14, 0.58) 0%, rgba(3, 18, 14, 0.35) 50%, rgba(3, 18, 14, 0.76) 100%),
+    linear-gradient(180deg, rgba(3, 18, 14, 0.55) 0%, rgba(3, 18, 14, 0.35) 45%, rgba(3, 18, 14, 0.85) 100%),
     url('/assets/2.PNG');
-}
-.forest-image-3 {
-  background-image:
-    linear-gradient(180deg, rgba(3, 18, 14, 0.52) 0%, rgba(3, 18, 14, 0.3) 50%, rgba(3, 18, 14, 0.86) 100%),
-    url('/assets/3.PNG');
 }
 .landing-hero::after,
 .forest-panel::after {
@@ -155,8 +150,39 @@ a { color: inherit; text-decoration: none; }
 .landing-hero-content,
 .landing-hero-panel {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   animation: landingRise 780ms ease-out both;
+}
+.falling-leaves {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+.leaf {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--size);
+  height: calc(var(--size) * 1.7);
+  border-radius: 100% 0 100% 0;
+  background: var(--leaf-color);
+  opacity: 0;
+  transform-origin: 50% 80%;
+  animation: leafFall var(--duration) linear var(--delay) infinite;
+  will-change: transform, opacity;
+}
+.leaf::after {
+  content: "";
+  position: absolute;
+  left: 48%;
+  top: 12%;
+  width: 1px;
+  height: 78%;
+  border-radius: 999px;
+  background: rgba(234, 233, 229, 0.2);
+  transform: rotate(28deg);
 }
 .landing-hero-content {
   max-width: 860px;
@@ -476,6 +502,23 @@ a { color: inherit; text-decoration: none; }
     transform: translateY(0);
   }
 }
+@keyframes leafFall {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--start-x), -14vh, 0) rotate(0deg) scale(var(--scale));
+  }
+  12% {
+    opacity: var(--opacity);
+  }
+  52% {
+    opacity: var(--opacity);
+    transform: translate3d(calc(var(--start-x) + var(--drift-x)), 52vh, 0) rotate(178deg) scale(var(--scale));
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(var(--start-x) + var(--drift-x-final)), 112vh, 0) rotate(360deg) scale(var(--scale));
+  }
+}
 @media (max-width: 980px) {
   .landing-nav {
     position: absolute;
@@ -497,6 +540,9 @@ a { color: inherit; text-decoration: none; }
   .landing-hero h1 {
     font-size: clamp(2.6rem, 6vw, 4.2rem);
     line-height: 0.98;
+  }
+  .leaf:nth-child(n + 11) {
+    display: none;
   }
   .landing-hero-panel {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -543,6 +589,9 @@ a { color: inherit; text-decoration: none; }
     font-size: clamp(2.1rem, 10vw, 3.1rem);
     line-height: 0.98;
   }
+  .leaf:nth-child(n + 7) {
+    display: none;
+  }
   .landing-actions,
   .landing-primary-button,
   .landing-secondary-button,
@@ -571,6 +620,14 @@ a { color: inherit; text-decoration: none; }
   .whatsapp-floating-button {
     right: 16px;
     bottom: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .falling-leaves {
+    display: none;
+  }
+  .leaf {
+    animation: none;
   }
 }
 
