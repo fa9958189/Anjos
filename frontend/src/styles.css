@@ -127,6 +127,49 @@ a { color: inherit; text-decoration: none; }
   pointer-events: none;
   background: linear-gradient(180deg, transparent, #081A16);
 }
+.landing-ambient-orb {
+  position: absolute;
+  left: 48%;
+  top: 28%;
+  z-index: 1;
+  width: min(42vw, 540px);
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(48, 193, 117, 0.24), rgba(4, 135, 57, 0.1) 34%, transparent 68%);
+  filter: blur(18px);
+  pointer-events: none;
+}
+.landing-particles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.landing-particles span {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(48, 193, 117, 0.72);
+  box-shadow: 0 0 18px rgba(48, 193, 117, 0.52);
+  animation: landingParticleFloat 7s ease-in-out infinite alternate;
+}
+.landing-particles span:nth-child(1) { left: 8%; top: 24%; animation-delay: -1s; }
+.landing-particles span:nth-child(2) { left: 18%; top: 72%; animation-delay: -5s; }
+.landing-particles span:nth-child(3) { left: 28%; top: 36%; animation-delay: -3s; }
+.landing-particles span:nth-child(4) { left: 39%; top: 82%; animation-delay: -7s; }
+.landing-particles span:nth-child(5) { left: 48%; top: 22%; animation-delay: -2s; }
+.landing-particles span:nth-child(6) { left: 57%; top: 64%; animation-delay: -4s; }
+.landing-particles span:nth-child(7) { left: 68%; top: 18%; animation-delay: -6s; }
+.landing-particles span:nth-child(8) { left: 78%; top: 52%; animation-delay: -8s; }
+.landing-particles span:nth-child(9) { left: 88%; top: 30%; animation-delay: -2s; }
+.landing-particles span:nth-child(10) { left: 93%; top: 78%; animation-delay: -5s; }
+.landing-particles span:nth-child(n + 11) {
+  width: 3px;
+  height: 3px;
+  opacity: 0.55;
+}
 .landing-leaves {
   position: absolute;
   inset: 0;
@@ -300,6 +343,23 @@ a { color: inherit; text-decoration: none; }
   gap: 16px;
   padding: clamp(26px, 5vw, 52px);
 }
+.landing-about-highlights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+.landing-about-highlights span {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid rgba(48, 193, 117, 0.2);
+  border-radius: 14px;
+  background: rgba(48, 193, 117, 0.08);
+  color: #EAE9E5;
+  font-weight: 850;
+}
 .landing-section h2,
 .landing-contact h2 {
   margin: 0;
@@ -325,6 +385,7 @@ a { color: inherit; text-decoration: none; }
   gap: 16px;
 }
 .landing-service-card {
+  position: relative;
   min-height: 180px;
   display: grid;
   align-content: space-between;
@@ -336,7 +397,19 @@ a { color: inherit; text-decoration: none; }
   color: #30C175;
   box-shadow: 0 18px 58px rgba(0, 0, 0, 0.22);
   backdrop-filter: blur(16px);
+  overflow: hidden;
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+.landing-service-card::before {
+  content: "";
+  position: absolute;
+  inset: auto 16% -45% 16%;
+  height: 90px;
+  border-radius: 999px;
+  background: rgba(48, 193, 117, 0.18);
+  filter: blur(30px);
+  opacity: 0;
+  transition: opacity 180ms ease, transform 180ms ease;
 }
 .landing-service-card:hover {
   transform: translateY(-6px);
@@ -344,7 +417,13 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(180deg, rgba(48, 193, 117, 0.16), rgba(234, 233, 229, 0.08));
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.28), 0 0 42px rgba(48, 193, 117, 0.14);
 }
-.landing-service-card span {
+.landing-service-card:hover::before {
+  opacity: 1;
+  transform: translateY(-12px);
+}
+.landing-service-icon {
+  position: relative;
+  z-index: 2;
   width: 48px;
   height: 48px;
   display: grid;
@@ -353,9 +432,45 @@ a { color: inherit; text-decoration: none; }
   background: rgba(48, 193, 117, 0.13);
   box-shadow: inset 0 0 24px rgba(48, 193, 117, 0.08);
 }
+.landing-service-card > div:not(.landing-card-leaves) {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 10px;
+}
 .landing-service-card strong {
   color: #ffffff;
   line-height: 1.28;
+}
+.landing-service-card p {
+  color: rgba(234, 233, 229, 0.66);
+  font-size: 0.94rem;
+  line-height: 1.55;
+}
+.landing-card-leaves {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.landing-card-leaves span {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 13px;
+  height: 7px;
+  border-radius: 80% 0 80% 0;
+  background: linear-gradient(135deg, #30C175, #048739);
+  opacity: 0;
+  filter: drop-shadow(0 0 8px rgba(48, 193, 117, 0.4));
+}
+.landing-card-leaves span:nth-child(2n) {
+  background: rgba(48, 193, 117, 0.62);
+}
+.landing-card-leaves span:nth-child(3n) {
+  width: 10px;
+  height: 6px;
+  background: rgba(234, 233, 229, 0.46);
 }
 .landing-contact {
   display: flex;
@@ -436,6 +551,16 @@ a { color: inherit; text-decoration: none; }
     transform: translateY(0);
   }
 }
+@keyframes landingParticleFloat {
+  from {
+    transform: translate3d(-8px, -10px, 0) scale(0.8);
+    opacity: 0.25;
+  }
+  to {
+    transform: translate3d(14px, 18px, 0) scale(1.16);
+    opacity: 0.78;
+  }
+}
 @media (max-width: 980px) {
   .landing-nav {
     position: absolute;
@@ -509,6 +634,12 @@ a { color: inherit; text-decoration: none; }
   }
   .landing-service-card {
     min-height: 142px;
+  }
+  .landing-about-highlights {
+    grid-template-columns: 1fr;
+  }
+  .landing-particles span:nth-child(n + 10) {
+    display: none;
   }
   .landing-leaves span:nth-child(n + 4) {
     display: none;
@@ -1003,6 +1134,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .landing-page *,
   .login-shell,
   .login-particles span,
   .login-submit,

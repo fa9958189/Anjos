@@ -32,7 +32,10 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChangeEvent, FormEvent, MouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import Lenis from 'lenis';
+import { ChangeEvent, FormEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { supabase } from './lib/supabase';
 
@@ -4208,15 +4211,100 @@ export function App() {
 }
 
 const institutionalServices = [
-  'Licenciamento Ambiental',
-  'Cadastro Ambiental Rural (CAR)',
-  'Outorga de Uso da Água',
-  'PRAD',
-  'Georreferenciamento',
-  'Gestão Documental Ambiental',
-  'Relatórios Técnicos',
-  'Acompanhamento de Processos'
+  {
+    title: 'Licenciamento Ambiental',
+    description: 'Condução técnica para viabilizar atividades com segurança jurídica e ambiental.'
+  },
+  {
+    title: 'Cadastro Ambiental Rural (CAR)',
+    description: 'Regularização e organização das informações ambientais do imóvel rural.'
+  },
+  {
+    title: 'Outorga de Uso da Água',
+    description: 'Apoio técnico para autorizações de uso hídrico junto aos órgãos competentes.'
+  },
+  {
+    title: 'PRAD',
+    description: 'Planejamento de recuperação de áreas degradadas com critérios ambientais.'
+  },
+  {
+    title: 'Georreferenciamento',
+    description: 'Levantamentos e dados territoriais para apoiar decisões e protocolos.'
+  },
+  {
+    title: 'Gestão Documental Ambiental',
+    description: 'Documentos, prazos e protocolos organizados para reduzir riscos operacionais.'
+  },
+  {
+    title: 'Relatórios Técnicos',
+    description: 'Peças técnicas claras para licenciamento, regularização e acompanhamento.'
+  },
+  {
+    title: 'Acompanhamento de Processos',
+    description: 'Monitoramento de etapas e exigências até a conclusão dos procedimentos.'
+  }
 ];
+
+type LandingService = (typeof institutionalServices)[number];
+
+function AnimatedServiceCard({ service }: { service: LandingService }) {
+  const cardRef = useRef<HTMLElement | null>(null);
+  const leavesRef = useRef<HTMLSpanElement[]>([]);
+
+  function playLeafAnimation() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const leaves = leavesRef.current.filter(Boolean);
+    gsap.killTweensOf(leaves);
+    gsap.set(leaves, {
+      x: -42,
+      y: 96,
+      opacity: 0,
+      rotate: -35,
+      scale: 0.55
+    });
+    gsap.to(leaves, {
+      x: (index) => 170 + index * 18,
+      y: (index) => 10 - index * 9,
+      rotate: (index) => 110 + index * 26,
+      scale: (index) => 0.62 + index * 0.06,
+      opacity: 1,
+      duration: 0.34,
+      stagger: 0.035,
+      ease: 'power2.out'
+    });
+    gsap.to(leaves, {
+      x: (index) => 280 + index * 26,
+      y: (index) => -36 - index * 8,
+      rotate: (index) => 210 + index * 35,
+      opacity: 0,
+      duration: 0.82,
+      delay: 0.26,
+      stagger: 0.035,
+      ease: 'power2.inOut'
+    });
+  }
+
+  return (
+    <article className="landing-service-card landing-reveal" ref={cardRef} onMouseEnter={playLeafAnimation}>
+      <div className="landing-card-leaves" aria-hidden="true">
+        {Array.from({ length: 7 }, (_, index) => (
+          <span
+            key={index}
+            ref={(node) => {
+              if (node) leavesRef.current[index] = node;
+            }}
+          />
+        ))}
+      </div>
+      <span className="landing-service-icon"><FileText size={22} /></span>
+      <div>
+        <strong>{service.title}</strong>
+        <p>{service.description}</p>
+      </div>
+    </article>
+  );
+}
 
 function WhatsAppFloatingButton() {
   return (
@@ -4227,6 +4315,86 @@ function WhatsAppFloatingButton() {
 }
 
 function LandingPage() {
+  const landingRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const root = landingRef.current;
+    if (!root) return;
+
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) return;
+
+    gsap.registerPlugin(ScrollTrigger);
+
+    const lenis = new Lenis({
+      duration: 1.05,
+      smoothWheel: true,
+      wheelMultiplier: 0.9
+    });
+    let rafId = 0;
+    const raf = (time: number) => {
+      lenis.raf(time);
+      rafId = requestAnimationFrame(raf);
+    };
+    rafId = requestAnimationFrame(raf);
+
+    const anchorLinks = Array.from(root.querySelectorAll<HTMLAnchorElement>('a[href^="#"]'));
+    const handleAnchorClick = (event: Event) => {
+      const target = event.currentTarget as HTMLAnchorElement;
+      const href = target.getAttribute('href');
+      if (!href || href === '#') return;
+      event.preventDefault();
+      lenis.scrollTo(href, { offset: -110 });
+    };
+    anchorLinks.forEach((link) => link.addEventListener('click', handleAnchorClick));
+
+    const ctx = gsap.context(() => {
+      gsap.from('.landing-hero-content > *', {
+        y: 28,
+        opacity: 0,
+        duration: 0.86,
+        stagger: 0.12,
+        ease: 'power3.out'
+      });
+      gsap.from('.landing-hero-panel div', {
+        y: 24,
+        opacity: 0,
+        duration: 0.78,
+        delay: 0.35,
+        stagger: 0.11,
+        ease: 'power3.out'
+      });
+      gsap.to('.landing-ambient-orb', {
+        x: 40,
+        y: -28,
+        duration: 5.8,
+        repeat: -1,
+        yoyo: true,
+        ease: 'sine.inOut'
+      });
+      gsap.utils.toArray<HTMLElement>('.landing-reveal').forEach((element) => {
+        gsap.from(element, {
+          scrollTrigger: {
+            trigger: element,
+            start: 'top 84%'
+          },
+          y: 34,
+          opacity: 0,
+          duration: 0.78,
+          ease: 'power2.out'
+        });
+      });
+    }, root);
+
+    return () => {
+      ctx.revert();
+      anchorLinks.forEach((link) => link.removeEventListener('click', handleAnchorClick));
+      cancelAnimationFrame(rafId);
+      lenis.destroy();
+      ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
+    };
+  }, []);
+
   function updateHeroParallax(event: MouseEvent<HTMLElement>) {
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - bounds.left) / bounds.width - 0.5;
@@ -4236,7 +4404,7 @@ function LandingPage() {
   }
 
   return (
-    <main className="landing-page">
+    <main className="landing-page" ref={landingRef}>
       <nav className="landing-nav" aria-label="Navegação institucional">
         <a className="landing-logo-link" href="/" aria-label="Anjos Ambiental">
           <img src="/assets/Logotipo-Anjos-sem-tag-V3.png" alt="Anjos Soluções Ambientais" />
@@ -4250,6 +4418,10 @@ function LandingPage() {
       </nav>
 
       <section className="landing-hero" onMouseMove={updateHeroParallax}>
+        <div className="landing-ambient-orb" aria-hidden="true" />
+        <div className="landing-particles" aria-hidden="true">
+          {Array.from({ length: 18 }, (_, index) => <span key={index} />)}
+        </div>
         <div className="landing-leaves" aria-hidden="true">
           <span />
           <span />
@@ -4283,39 +4455,39 @@ function LandingPage() {
         </div>
       </section>
 
-      <section className="landing-section landing-about" id="quem-somos">
+      <section className="landing-section landing-about landing-reveal" id="quem-somos">
         <div className="landing-about-media" aria-hidden="true">
           <img src="/assets/Capa Reels.png" alt="" />
         </div>
         <div className="landing-about-copy">
           <p className="landing-eyebrow">Quem Somos</p>
           <h2>Quem Somos</h2>
-          <p>A Anjos Ambiental une consultoria técnica, organização documental e gestão ambiental para regularizar propriedades rurais, empresas e empreendimentos com segurança.</p>
+          <p>A Anjos Ambiental é especializada em consultoria e gestão ambiental, auxiliando produtores rurais, empresas e empreendedores na regularização de seus projetos e no cumprimento das exigências ambientais.</p>
           <p>Nossa missão é conduzir cada processo com transparência, agilidade e compromisso ambiental, reduzindo riscos e trazendo clareza para decisões importantes.</p>
-          <p>Atuamos com experiência em licenciamento, cadastros ambientais, outorgas, relatórios técnicos e acompanhamento de processos junto aos órgãos competentes.</p>
+          <div className="landing-about-highlights">
+            <span>Organização</span>
+            <span>Transparência</span>
+            <span>Agilidade</span>
+            <span>Acompanhamento técnico</span>
+          </div>
         </div>
       </section>
 
-      <section className="landing-section" id="servicos">
+      <section className="landing-section landing-reveal" id="servicos">
         <div className="landing-section-heading">
           <p className="landing-eyebrow">Serviços</p>
           <h2>Soluções ambientais para cada etapa do processo</h2>
         </div>
         <div className="landing-services-grid">
-          {institutionalServices.map((service) => (
-            <article className="landing-service-card" key={service}>
-              <span><FileText size={22} /></span>
-              <strong>{service}</strong>
-            </article>
-          ))}
+          {institutionalServices.map((service) => <AnimatedServiceCard service={service} key={service.title} />)}
         </div>
       </section>
 
-      <section className="landing-section landing-contact" id="contato">
+      <section className="landing-section landing-contact landing-reveal" id="contato">
         <div>
           <p className="landing-eyebrow">Contato</p>
-          <h2>Entre em contato</h2>
-          <p>Fale com a Anjos Ambiental pelo WhatsApp e solicite orientação para seu processo ambiental.</p>
+          <h2>Fale com a Anjos Ambiental</h2>
+          <p>Precisa regularizar sua propriedade, empresa ou empreendimento? Nossa equipe pode orientar você.</p>
           <strong>WhatsApp: (63) 99203-6652</strong>
         </div>
         <a className="landing-primary-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer">
