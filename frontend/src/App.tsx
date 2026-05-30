@@ -31,12 +31,11 @@ import {
   X
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useGSAP } from '@gsap/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import Lenis from 'lenis';
-import { ChangeEvent, FormEvent, RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { supabase } from './lib/supabase';
 
@@ -4249,55 +4248,8 @@ const institutionalServices = [
 type LandingService = (typeof institutionalServices)[number];
 
 function AnimatedServiceCard({ service }: { service: LandingService }) {
-  const cardRef = useRef<HTMLElement | null>(null);
-  const leavesRef = useRef<HTMLSpanElement[]>([]);
-
-  function playLeafAnimation() {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-    const leaves = leavesRef.current.filter(Boolean);
-    gsap.killTweensOf(leaves);
-    gsap.set(leaves, {
-      x: -42,
-      y: 96,
-      opacity: 0,
-      rotate: -35,
-      scale: 0.55
-    });
-    gsap.to(leaves, {
-      x: (index) => 170 + index * 18,
-      y: (index) => 10 - index * 9,
-      rotate: (index) => 110 + index * 26,
-      scale: (index) => 0.62 + index * 0.06,
-      opacity: 1,
-      duration: 0.34,
-      stagger: 0.035,
-      ease: 'power2.out'
-    });
-    gsap.to(leaves, {
-      x: (index) => 280 + index * 26,
-      y: (index) => -36 - index * 8,
-      rotate: (index) => 210 + index * 35,
-      opacity: 0,
-      duration: 0.82,
-      delay: 0.26,
-      stagger: 0.035,
-      ease: 'power2.inOut'
-    });
-  }
-
   return (
-    <article className="landing-service-card landing-reveal" ref={cardRef} onMouseEnter={playLeafAnimation}>
-      <div className="landing-card-leaves" aria-hidden="true">
-        {Array.from({ length: 7 }, (_, index) => (
-          <span
-            key={index}
-            ref={(node) => {
-              if (node) leavesRef.current[index] = node;
-            }}
-          />
-        ))}
-      </div>
+    <article className="landing-service-card landing-reveal">
       <span className="landing-service-icon"><FileText size={22} /></span>
       <div>
         <strong>{service.title}</strong>
@@ -4315,157 +4267,8 @@ function WhatsAppFloatingButton() {
   );
 }
 
-function ForestLeafTrail({ heroRef }: { heroRef: RefObject<HTMLElement | null> }) {
-  const layerRef = useRef<HTMLDivElement | null>(null);
-  const glowRef = useRef<HTMLDivElement | null>(null);
-  const leavesRef = useRef<HTMLSpanElement[]>([]);
-
-  useGSAP(
-    () => {
-      const hero = heroRef.current;
-      const layer = layerRef.current;
-      const glow = glowRef.current;
-      const forest = hero?.querySelector<HTMLElement>('.landing-hero-forest');
-      const vegetation = hero?.querySelector<HTMLElement>('.landing-vegetation-layer');
-      const leaves = leavesRef.current.filter(Boolean);
-      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const isTouch = window.matchMedia('(pointer: coarse)').matches;
-
-      if (!hero || !layer || !glow || !forest || !vegetation || reducedMotion || isTouch) return;
-
-      gsap.set(layer, { opacity: 0 });
-      gsap.set(leaves, { opacity: 0, x: -100, y: -100 });
-
-      const glowX = gsap.quickTo(glow, 'x', { duration: 0.35, ease: 'power3.out' });
-      const glowY = gsap.quickTo(glow, 'y', { duration: 0.35, ease: 'power3.out' });
-      const forestX = gsap.quickTo(forest, 'x', { duration: 0.8, ease: 'power3.out' });
-      const forestY = gsap.quickTo(forest, 'y', { duration: 0.8, ease: 'power3.out' });
-      const vegetationX = gsap.quickTo(vegetation, 'x', { duration: 0.9, ease: 'power3.out' });
-      const vegetationY = gsap.quickTo(vegetation, 'y', { duration: 0.9, ease: 'power3.out' });
-      const vegetationRotate = gsap.quickTo(vegetation, 'rotation', { duration: 0.9, ease: 'power3.out' });
-
-      let leafIndex = 0;
-      let frame = 0;
-      let lastX = Number.NaN;
-      let lastY = Number.NaN;
-      let lastTime = 0;
-      let latestEvent: globalThis.MouseEvent | null = null;
-
-      const spawnLeaf = (x: number, y: number) => {
-        const leaf = leaves[leafIndex % leaves.length];
-        leafIndex += 1;
-        if (!leaf) return;
-
-        const direction = Math.random() > 0.5 ? 1 : -1;
-        const endX = x + direction * (48 + Math.random() * 96);
-        const endY = y - 72 + Math.random() * 130;
-        const scale = 0.5 + Math.random() * 0.7;
-
-        gsap.killTweensOf(leaf);
-        gsap.set(leaf, {
-          x: x + (Math.random() * 18 - 9),
-          y: y + (Math.random() * 18 - 9),
-          scale,
-          rotate: Math.random() * 80 - 40,
-          opacity: 0
-        });
-        gsap.timeline()
-          .to(leaf, {
-            opacity: 0.62,
-            duration: 0.18,
-            ease: 'power2.out'
-          })
-          .to(leaf, {
-            x: endX,
-            y: endY,
-            rotate: direction * (80 + Math.random() * 180),
-            opacity: 0,
-            duration: 0.8 + Math.random() * 0.65,
-            ease: 'power3.out'
-          }, '<');
-      };
-
-      const handleEnter = () => {
-        gsap.to(layer, { opacity: 1, duration: 0.28, ease: 'power2.out' });
-      };
-
-      const handleMove = (event: globalThis.MouseEvent) => {
-        latestEvent = event;
-        if (frame) return;
-
-        frame = requestAnimationFrame(() => {
-          frame = 0;
-          if (!latestEvent) return;
-
-          const bounds = hero.getBoundingClientRect();
-          const x = latestEvent.clientX - bounds.left;
-          const y = latestEvent.clientY - bounds.top;
-          const normalizedX = x / bounds.width - 0.5;
-          const normalizedY = y / bounds.height - 0.5;
-
-          glowX(x - 150);
-          glowY(y - 150);
-          forestX(normalizedX * -10);
-          forestY(normalizedY * -8);
-          vegetationX(normalizedX * 10);
-          vegetationY(normalizedY * 7);
-          vegetationRotate(normalizedX * 0.55);
-
-          const distance = Number.isNaN(lastX) ? 999 : Math.hypot(x - lastX, y - lastY);
-          const now = performance.now();
-          if (distance > 24 || now - lastTime > 115) {
-            spawnLeaf(x, y);
-            lastX = x;
-            lastY = y;
-            lastTime = now;
-          }
-        });
-      };
-
-      const handleLeave = () => {
-        gsap.to(layer, { opacity: 0, duration: 0.42, ease: 'power2.out' });
-        forestX(0);
-        forestY(0);
-        vegetationX(0);
-        vegetationY(0);
-        vegetationRotate(0);
-      };
-
-      hero.addEventListener('mouseenter', handleEnter);
-      hero.addEventListener('mousemove', handleMove);
-      hero.addEventListener('mouseleave', handleLeave);
-
-      return () => {
-        hero.removeEventListener('mouseenter', handleEnter);
-        hero.removeEventListener('mousemove', handleMove);
-        hero.removeEventListener('mouseleave', handleLeave);
-        if (frame) cancelAnimationFrame(frame);
-        gsap.killTweensOf([layer, glow, forest, vegetation, ...leaves]);
-      };
-    },
-    { scope: layerRef, dependencies: [heroRef] }
-  );
-
-  return (
-    <div className="forest-leaf-trail" ref={layerRef} aria-hidden="true">
-      <div className="forest-cursor-glow" ref={glowRef} />
-      <div className="forest-cursor-leaves">
-        {Array.from({ length: 16 }, (_, index) => (
-          <span
-            key={index}
-            ref={(node) => {
-              if (node) leavesRef.current[index] = node;
-            }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function LandingPage() {
   const landingRef = useRef<HTMLElement | null>(null);
-  const heroRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const root = landingRef.current;
@@ -4514,14 +4317,23 @@ function LandingPage() {
         stagger: 0.11,
         ease: 'power3.out'
       });
-      gsap.to('.landing-ambient-orb', {
-        x: 40,
-        y: -28,
-        duration: 5.8,
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut'
-      });
+      gsap.set('.hero-bg-1', { opacity: 1, scale: 1.08 });
+      gsap.set('.hero-bg-2', { opacity: 0, scale: 1.05 });
+      gsap.set('.hero-bg-3', { opacity: 0, scale: 1.03 });
+      if (!window.matchMedia('(max-width: 640px)').matches) {
+        gsap.timeline({
+          scrollTrigger: {
+            trigger: '.landing-hero',
+            start: 'top top',
+            end: 'bottom bottom',
+            scrub: 0.6
+          }
+        })
+          .to('.hero-bg-1', { opacity: 0, scale: 1.03, ease: 'none' }, 0)
+          .to('.hero-bg-2', { opacity: 1, scale: 1.01, ease: 'none' }, 0)
+          .to('.hero-bg-2', { opacity: 0, scale: 1, ease: 'none' }, 0.55)
+          .to('.hero-bg-3', { opacity: 1, scale: 1, ease: 'none' }, 0.55);
+      }
       gsap.utils.toArray<HTMLElement>('.landing-reveal').forEach((element) => {
         gsap.from(element, {
           scrollTrigger: {
@@ -4559,44 +4371,37 @@ function LandingPage() {
         </div>
       </nav>
 
-      <section className="landing-hero" ref={heroRef}>
-        <div className="landing-hero-forest" aria-hidden="true" />
-        <div className="landing-hero-overlay" aria-hidden="true" />
-        <div className="landing-vegetation-layer" aria-hidden="true" />
-        <div className="landing-ambient-orb" aria-hidden="true" />
-        <ForestLeafTrail heroRef={heroRef} />
-        <div className="landing-particles" aria-hidden="true">
-          {Array.from({ length: 18 }, (_, index) => <span key={index} />)}
-        </div>
-        <div className="landing-leaves" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-        </div>
-        <div className="landing-hero-content">
-          <p className="landing-eyebrow">Tecnologia ambiental e regularização</p>
-          <h1>Regularização Ambiental com Segurança e Agilidade</h1>
-          <p>Licenciamentos, CAR, Outorgas, PRAD, Georreferenciamento e Gestão Ambiental para propriedades rurais e empresas.</p>
-          <div className="landing-actions">
-            <a className="landing-primary-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer">Solicitar Atendimento</a>
-            <a className="landing-secondary-button" href="/login">Acessar Sistema</a>
+      <section className="landing-hero">
+        <div className="landing-hero-stage">
+          <div className="hero-background" aria-hidden="true">
+            <div className="hero-bg hero-bg-1" />
+            <div className="hero-bg hero-bg-2" />
+            <div className="hero-bg hero-bg-3" />
           </div>
-        </div>
-        <div className="landing-hero-panel" aria-hidden="true">
-          <div>
-            <span>Licenciamento</span>
-            <strong>Processos conduzidos com método técnico</strong>
+          <div className="landing-hero-overlay" aria-hidden="true" />
+          <div className="landing-ambient-orb" aria-hidden="true" />
+          <div className="landing-hero-content">
+            <p className="landing-eyebrow">Tecnologia ambiental e regularização</p>
+            <h1>Regularização Ambiental com Segurança e Agilidade</h1>
+            <p>Licenciamentos, CAR, Outorgas, PRAD, Georreferenciamento e Gestão Ambiental para propriedades rurais e empresas.</p>
+            <div className="landing-actions">
+              <a className="landing-primary-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer">Solicitar Atendimento</a>
+              <a className="landing-secondary-button" href="/login">Acessar Sistema</a>
+            </div>
           </div>
-          <div>
-            <span>Gestão</span>
-            <strong>Documentos, etapas e protocolos organizados</strong>
-          </div>
-          <div>
-            <span>Campo</span>
-            <strong>Atuação ambiental para imóveis e empresas</strong>
+          <div className="landing-hero-panel" aria-hidden="true">
+            <div>
+              <span>Licenciamento</span>
+              <strong>Processos conduzidos com método técnico</strong>
+            </div>
+            <div>
+              <span>Gestão</span>
+              <strong>Documentos, etapas e protocolos organizados</strong>
+            </div>
+            <div>
+              <span>Campo</span>
+              <strong>Atuação ambiental para imóveis e empresas</strong>
+            </div>
           </div>
         </div>
       </section>

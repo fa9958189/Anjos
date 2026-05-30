@@ -9,7 +9,6 @@
     "preview": "vite preview --host 0.0.0.0 --port 4173"
   },
   "dependencies": {
-    "@gsap/react": "^2.1.2",
     "@supabase/supabase-js": "^2.106.2",
     "@tailwindcss/vite": "^4.3.0",
     "@vitejs/plugin-react": "latest",
