@@ -4317,23 +4317,6 @@ function LandingPage() {
         stagger: 0.11,
         ease: 'power3.out'
       });
-      gsap.set('.hero-bg-1', { opacity: 1, scale: 1.08 });
-      gsap.set('.hero-bg-2', { opacity: 0, scale: 1.05 });
-      gsap.set('.hero-bg-3', { opacity: 0, scale: 1.03 });
-      if (!window.matchMedia('(max-width: 640px)').matches) {
-        gsap.timeline({
-          scrollTrigger: {
-            trigger: '.landing-hero',
-            start: 'top top',
-            end: 'bottom bottom',
-            scrub: 0.6
-          }
-        })
-          .to('.hero-bg-1', { opacity: 0, scale: 1.03, ease: 'none' }, 0)
-          .to('.hero-bg-2', { opacity: 1, scale: 1.01, ease: 'none' }, 0)
-          .to('.hero-bg-2', { opacity: 0, scale: 1, ease: 'none' }, 0.55)
-          .to('.hero-bg-3', { opacity: 1, scale: 1, ease: 'none' }, 0.55);
-      }
       gsap.utils.toArray<HTMLElement>('.landing-reveal').forEach((element) => {
         gsap.from(element, {
           scrollTrigger: {
@@ -4371,40 +4354,33 @@ function LandingPage() {
         </div>
       </nav>
 
-      <section className="landing-hero">
-        <div className="landing-hero-stage">
-          <div className="hero-background" aria-hidden="true">
-            <div className="hero-bg hero-bg-1" />
-            <div className="hero-bg hero-bg-2" />
-            <div className="hero-bg hero-bg-3" />
+      <section className="landing-hero hero-image-1">
+        <div className="landing-hero-content">
+          <p className="landing-eyebrow">Tecnologia ambiental e regularização</p>
+          <h1>Regularização Ambiental com Segurança e Agilidade</h1>
+          <p>Licenciamentos, CAR, Outorgas, PRAD, Georreferenciamento e Gestão Ambiental para propriedades rurais e empresas.</p>
+          <div className="landing-actions">
+            <a className="landing-primary-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer">Solicitar Atendimento</a>
+            <a className="landing-secondary-button" href="/login">Acessar Sistema</a>
           </div>
-          <div className="landing-hero-overlay" aria-hidden="true" />
-          <div className="landing-ambient-orb" aria-hidden="true" />
-          <div className="landing-hero-content">
-            <p className="landing-eyebrow">Tecnologia ambiental e regularização</p>
-            <h1>Regularização Ambiental com Segurança e Agilidade</h1>
-            <p>Licenciamentos, CAR, Outorgas, PRAD, Georreferenciamento e Gestão Ambiental para propriedades rurais e empresas.</p>
-            <div className="landing-actions">
-              <a className="landing-primary-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer">Solicitar Atendimento</a>
-              <a className="landing-secondary-button" href="/login">Acessar Sistema</a>
-            </div>
+        </div>
+        <div className="landing-hero-panel" aria-hidden="true">
+          <div>
+            <span>Licenciamento</span>
+            <strong>Processos conduzidos com método técnico</strong>
           </div>
-          <div className="landing-hero-panel" aria-hidden="true">
-            <div>
-              <span>Licenciamento</span>
-              <strong>Processos conduzidos com método técnico</strong>
-            </div>
-            <div>
-              <span>Gestão</span>
-              <strong>Documentos, etapas e protocolos organizados</strong>
-            </div>
-            <div>
-              <span>Campo</span>
-              <strong>Atuação ambiental para imóveis e empresas</strong>
-            </div>
+          <div>
+            <span>Gestão</span>
+            <strong>Documentos, etapas e protocolos organizados</strong>
+          </div>
+          <div>
+            <span>Campo</span>
+            <strong>Atuação ambiental para imóveis e empresas</strong>
           </div>
         </div>
       </section>
+      <section className="forest-panel forest-image-2" aria-label="Paisagem ambiental em sequência" />
+      <section className="forest-panel forest-image-3" aria-label="Paisagem ambiental final" />
 
       <section className="landing-section landing-about landing-reveal" id="quem-somos">
         <div className="landing-about-media" aria-hidden="true">
