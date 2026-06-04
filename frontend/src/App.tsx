@@ -1485,7 +1485,7 @@ function buildProposalHtml(proposal: Proposal) {
   <main class="proposal-page">
     <header class="proposal-header">
       <div class="brand company">
-        <img class="brand-logo" src="/assets/logo-login.png" alt="Anjos Soluções Ambientais" />
+        <img class="brand-logo" src="/assets/LogotipoEscura.png" alt="Anjos Soluções Ambientais" />
         <div>
           <strong>ANJOS AMBIENTAL</strong>
           <span>Consultoria e Licenciamento Ambiental</span>
@@ -1674,7 +1674,7 @@ function buildContractHtml(contract: ContractRecord) {
   <main class="contract-page">
     <header class="contract-header">
       <div class="brand company">
-        <img class="brand-logo" src="/assets/logo-login.png" alt="Anjos Soluções Ambientais" />
+        <img class="brand-logo" src="/assets/LogotipoEscura.png" alt="Anjos Soluções Ambientais" />
         <div>
           <strong>ANJOS AMBIENTAL</strong>
           <span>Consultoria e Licenciamento Ambiental</span>
