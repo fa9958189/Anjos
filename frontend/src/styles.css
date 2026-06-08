@@ -444,46 +444,150 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.55;
 }
 .landing-contact {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-  padding: clamp(28px, 5vw, 54px);
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  gap: clamp(20px, 4vw, 46px);
+  align-items: stretch;
+  padding: clamp(28px, 5vw, 58px);
+  overflow: hidden;
+  border-color: rgba(48, 193, 117, 0.18);
+  background:
+    radial-gradient(circle at 18% 18%, rgba(48, 193, 117, 0.14), transparent 20rem),
+    linear-gradient(145deg, rgba(12, 46, 51, 0.88), rgba(8, 26, 22, 0.82));
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
-.landing-contact div {
+.landing-contact:hover {
+  transform: translateY(-4px);
+  border-color: rgba(48, 193, 117, 0.34);
+  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.34), 0 0 56px rgba(48, 193, 117, 0.1);
+}
+.landing-contact-copy,
+.landing-contact-card {
+  position: relative;
+  z-index: 1;
+}
+.landing-contact-copy {
+  display: grid;
+  align-content: center;
+  gap: 16px;
+}
+.landing-contact-copy p:not(.landing-eyebrow) {
+  max-width: 720px;
+}
+.landing-contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+.landing-contact-card {
+  display: grid;
+  align-content: center;
+  gap: 16px;
+  padding: clamp(22px, 4vw, 34px);
+  border: 1px solid rgba(234, 233, 229, 0.14);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 24px 60px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(14px);
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+.landing-contact-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(48, 193, 117, 0.36);
+  background: rgba(255, 255, 255, 0.08);
+}
+.landing-contact-card span {
+  color: #30C175;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.landing-contact-card strong {
+  color: #ffffff;
+  font-size: clamp(1.7rem, 3vw, 2.4rem);
+  line-height: 1;
+}
+.landing-contact-card ul {
   display: grid;
   gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.landing-contact strong {
-  color: #EAE9E5;
-}
-.landing-footer {
+.landing-contact-card li {
+  position: relative;
+  min-height: 42px;
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 38px 0 48px;
-  border-top: 1px solid rgba(234, 233, 229, 0.14);
+  padding: 9px 12px 9px 34px;
+  border: 1px solid rgba(48, 193, 117, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(234, 233, 229, 0.84);
+  font-weight: 760;
+}
+.landing-contact-card li::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #30C175;
+  box-shadow: 0 0 14px rgba(48, 193, 117, 0.46);
+}
+.landing-footer {
+  display: grid;
+  gap: 26px;
+  padding: 34px 0 42px;
+  border-top: 1px solid rgba(234, 233, 229, 0.16);
+}
+.landing-footer-grid {
+  display: grid;
+  grid-template-columns: 1.25fr repeat(3, minmax(0, 1fr));
+  gap: clamp(18px, 4vw, 44px);
+  align-items: start;
+}
+.landing-footer-grid > div {
+  display: grid;
+  gap: 8px;
 }
 .landing-footer img {
-  width: 190px;
+  width: min(190px, 70vw);
   height: auto;
   filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.32)) contrast(1.1) saturate(1.08);
 }
-.landing-footer strong,
-.landing-footer span,
-.landing-footer small {
-  display: block;
-}
 .landing-footer strong {
+  margin-bottom: 4px;
   color: #ffffff;
+  font-size: 0.95rem;
 }
-.landing-footer span {
-  margin-top: 5px;
-  color: rgba(234, 233, 229, 0.78);
+.landing-footer span,
+.landing-footer a,
+.landing-footer p,
+.landing-footer-bottom {
+  margin: 0;
+  color: rgba(234, 233, 229, 0.68);
+  font-size: 0.94rem;
+  line-height: 1.55;
 }
-.landing-footer small {
-  margin-top: 8px;
-  color: rgba(234, 233, 229, 0.52);
+.landing-footer a {
+  transition: color 180ms ease, transform 180ms ease;
+}
+.landing-footer a:hover {
+  color: #30C175;
+  transform: translateX(3px);
+}
+.landing-footer-brand {
+  max-width: 280px;
+}
+.landing-footer-bottom {
+  padding-top: 22px;
+  border-top: 1px solid rgba(234, 233, 229, 0.1);
+  color: rgba(234, 233, 229, 0.56);
 }
 .whatsapp-floating-button {
   position: fixed;
@@ -564,8 +668,10 @@ a { color: inherit; text-decoration: none; }
     grid-column: 1 / -1;
   }
   .landing-contact {
-    align-items: flex-start;
-    flex-direction: column;
+    grid-template-columns: 1fr;
+  }
+  .landing-footer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 640px) {
@@ -619,9 +725,23 @@ a { color: inherit; text-decoration: none; }
   .landing-about-highlights {
     grid-template-columns: 1fr;
   }
-  .landing-footer {
-    align-items: flex-start;
-    flex-direction: column;
+  .landing-contact {
+    padding: 24px;
+  }
+  .landing-contact-actions {
+    display: grid;
+  }
+  .landing-contact-card {
+    padding: 20px;
+  }
+  .landing-footer-grid {
+    grid-template-columns: 1fr;
+  }
+  .landing-footer-brand {
+    max-width: none;
+  }
+  .landing-footer-bottom {
+    padding-right: 72px;
   }
   .whatsapp-floating-button {
     right: 16px;

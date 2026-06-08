@@ -4480,25 +4480,56 @@ function LandingPage() {
       </section>
 
       <section className="landing-section landing-contact landing-reveal" id="contato">
-        <div>
+        <div className="landing-contact-copy">
           <p className="landing-eyebrow">Contato</p>
-          <h2>Fale com a Anjos Ambiental</h2>
-          <p>Precisa regularizar sua propriedade, empresa ou empreendimento? Nossa equipe pode orientar você.</p>
-          <strong>WhatsApp: (63) 99203-6652</strong>
+          <h2>Vamos regularizar seu imóvel ou empreendimento?</h2>
+          <p>Fale com a Anjos Ambiental e receba orientação para conduzir seu processo ambiental com segurança, organização e agilidade.</p>
+          <div className="landing-contact-actions">
+            <a className="landing-primary-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer">
+              <MessageCircle size={19} /> Falar no WhatsApp
+            </a>
+            <a className="landing-secondary-button" href="/login">Acessar Sistema</a>
+          </div>
         </div>
-        <a className="landing-primary-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer">
-          <MessageCircle size={19} /> Falar no WhatsApp
-        </a>
+        <aside className="landing-contact-card" aria-label="Informações de atendimento">
+          <span>Atendimento Anjos</span>
+          <strong>(63) 99203-6652</strong>
+          <ul>
+            <li>Atendimento técnico</li>
+            <li>Processos ambientais</li>
+            <li>Organização de documentos</li>
+            <li>Acompanhamento até a conclusão</li>
+          </ul>
+        </aside>
       </section>
 
       <footer className="landing-footer">
-        <img src="/assets/Logotipo-Anjos-sem-tag-V3.png" alt="Anjos Soluções Ambientais" />
-        <div>
-          <strong>Anjos Ambiental</strong>
-          <span>Soluções Ambientais e Gestão de Processos</span>
-          <span>WhatsApp: (63) 99203-6652</span>
-          <small>© Todos os direitos reservados.</small>
+        <div className="landing-footer-grid">
+          <div className="landing-footer-brand">
+            <img src="/assets/Logotipo-Anjos-sem-tag-V3.png" alt="Anjos Soluções Ambientais" />
+            <p>Soluções Ambientais e Gestão de Processos</p>
+          </div>
+          <div>
+            <strong>Serviços</strong>
+            <span>Licenciamento Ambiental</span>
+            <span>CAR e Outorgas</span>
+            <span>Gestão Ambiental</span>
+            <span>Georreferenciamento</span>
+          </div>
+          <div>
+            <strong>Navegação</strong>
+            <a href="#quem-somos">Quem Somos</a>
+            <a href="#servicos">Serviços</a>
+            <a href="#contato">Contato</a>
+            <a href="/login">Acessar Sistema</a>
+          </div>
+          <div>
+            <strong>Atendimento</strong>
+            <span>WhatsApp: (63) 99203-6652</span>
+            <span>Atendimento para propriedades rurais, empresas e empreendimentos</span>
+          </div>
         </div>
+        <div className="landing-footer-bottom">© Todos os direitos reservados — Anjos Ambiental</div>
       </footer>
       <WhatsAppFloatingButton />
     </main>
