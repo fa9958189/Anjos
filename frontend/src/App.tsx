@@ -2609,23 +2609,23 @@ export function App() {
   const [users, setUsers] = useState<SystemUser[]>(initialUsers);
   const [isUserFormOpen, setIsUserFormOpen] = useState(false);
   const [userForm, setUserForm] = useState<UserFormState>(emptyUserForm);
-  const [clients, setClients] = useState<Client[]>(initialClients);
+  const [clients, setClients] = useState<Client[]>([]);
   const [clientSearch, setClientSearch] = useState('');
   const [isClientFormOpen, setIsClientFormOpen] = useState(false);
   const [clientForm, setClientForm] = useState<ClientFormState>(emptyClientForm);
-  const [processes, setProcesses] = useState<EnvironmentalProcess[]>(initialProcesses);
+  const [processes, setProcesses] = useState<EnvironmentalProcess[]>([]);
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
-  const [proposals, setProposals] = useState<Proposal[]>(initialProposals);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
   const [selectedProposalProcessId, setSelectedProposalProcessId] = useState<string | null>(null);
   const [proposalForm, setProposalForm] = useState<ProposalFormState>(emptyProposalForm);
-  const [contracts, setContracts] = useState<ContractRecord[]>(initialContracts);
+  const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [selectedContractProposalId, setSelectedContractProposalId] = useState<string | null>(null);
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
-  const [executionRecords, setExecutionRecords] = useState<ExecutionRecord[]>(initialExecutionRecords);
+  const [executionRecords, setExecutionRecords] = useState<ExecutionRecord[]>([]);
   const [selectedExecutionProcessId, setSelectedExecutionProcessId] = useState<string | null>(null);
-  const [financialRecords, setFinancialRecords] = useState<FinancialRecord[]>(initialFinancialRecords);
-  const [serviceTrackings, setServiceTrackings] = useState<ServiceTracking[]>(initialServiceTrackings);
-  const [documents, setDocuments] = useState<DocumentRecord[]>(initialDocuments);
+  const [financialRecords, setFinancialRecords] = useState<FinancialRecord[]>([]);
+  const [serviceTrackings, setServiceTrackings] = useState<ServiceTracking[]>([]);
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
 
   useEffect(() => {
     const updateCurrentPath = () => setCurrentPath(window.location.pathname);
