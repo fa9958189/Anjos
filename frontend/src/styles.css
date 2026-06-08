@@ -118,7 +118,7 @@ a { color: inherit; text-decoration: none; }
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
-  filter: brightness(0.82) saturate(1.05);
+  filter: brightness(0.92) saturate(1.06);
   transform-origin: center;
   will-change: opacity, transform;
 }
@@ -145,8 +145,8 @@ a { color: inherit; text-decoration: none; }
 .landing-hero-overlay {
   z-index: 1;
   background:
-    linear-gradient(90deg, rgba(3, 18, 14, 0.88) 0%, rgba(3, 18, 14, 0.68) 45%, rgba(3, 18, 14, 0.48) 100%),
-    linear-gradient(180deg, rgba(3, 18, 14, 0.74) 0%, rgba(3, 18, 14, 0.4) 52%, rgba(3, 18, 14, 0.9) 100%);
+    linear-gradient(90deg, rgba(3, 18, 14, 0.58) 0%, rgba(3, 18, 14, 0.36) 45%, rgba(3, 18, 14, 0.42) 100%),
+    linear-gradient(180deg, rgba(3, 18, 14, 0.42) 0%, rgba(3, 18, 14, 0.18) 52%, rgba(3, 18, 14, 0.72) 100%);
 }
 .landing-hero::after {
   content: "";
@@ -156,7 +156,7 @@ a { color: inherit; text-decoration: none; }
   bottom: 0;
   height: 180px;
   pointer-events: none;
-  background: linear-gradient(to bottom, rgba(3, 18, 14, 0), rgba(3, 18, 14, 0.95));
+  background: linear-gradient(to bottom, rgba(3, 18, 14, 0), rgba(3, 18, 14, 0.72));
   z-index: 1;
 }
 .landing-hero-content,
