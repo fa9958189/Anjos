@@ -4343,23 +4343,27 @@ function LandingPage() {
     anchorLinks.forEach((link) => link.addEventListener('click', handleAnchorClick));
 
     const ctx = gsap.context(() => {
-      gsap.set('.landing-bg-one', { opacity: 1, scale: 1 });
-      gsap.set('.landing-bg-two', { opacity: 0, scale: 1.15 });
+      gsap.set('.landing-bg-one', { opacity: 1, scale: 1, filter: 'brightness(0.82) saturate(1.05)' });
+      gsap.set('.landing-bg-two, .landing-bg-three, .landing-bg-four', { opacity: 0, scale: 1.15, filter: 'brightness(0.82) saturate(1.05)' });
 
       gsap.timeline({
         scrollTrigger: {
           trigger: '.landing-hero',
           start: 'top top',
-          end: () => window.matchMedia('(max-width: 640px)').matches ? '+=80%' : '+=105%',
+          end: () => window.matchMedia('(max-width: 640px)').matches ? '+=240%' : '+=320%',
           scrub: 0.65,
           pin: true,
           anticipatePin: 1,
           invalidateOnRefresh: true
         }
       })
-        .to('.landing-bg-one', { opacity: 0, scale: 0.94, filter: 'brightness(0.62) saturate(0.92)', ease: 'none' }, 0)
-        .to('.landing-bg-two', { opacity: 1, scale: 1, ease: 'none' }, 0)
-        .to('.landing-hero-overlay', { opacity: 0.92, ease: 'none' }, 0);
+        .to('.landing-bg-one', { opacity: 0, scale: 0.94, filter: 'brightness(0.62) saturate(0.92)', ease: 'none', duration: 1 }, 0)
+        .to('.landing-bg-two', { opacity: 1, scale: 1, ease: 'none', duration: 1 }, 0)
+        .to('.landing-bg-two', { opacity: 0, scale: 0.96, filter: 'brightness(0.64) saturate(0.94)', ease: 'none', duration: 1 }, 1)
+        .to('.landing-bg-three', { opacity: 1, scale: 1, ease: 'none', duration: 1 }, 1)
+        .to('.landing-bg-three', { opacity: 0, scale: 0.96, filter: 'brightness(0.64) saturate(0.94)', ease: 'none', duration: 1 }, 2)
+        .to('.landing-bg-four', { opacity: 1, scale: 1, ease: 'none', duration: 1 }, 2)
+        .to('.landing-hero-overlay', { opacity: 0.94, ease: 'none', duration: 3 }, 0);
 
       gsap.from('.landing-hero-content > *', {
         y: 28,
@@ -4417,6 +4421,8 @@ function LandingPage() {
         <div className="landing-hero-background" aria-hidden="true">
           <div className="landing-hero-bg landing-bg-one" />
           <div className="landing-hero-bg landing-bg-two" />
+          <div className="landing-hero-bg landing-bg-three" />
+          <div className="landing-hero-bg landing-bg-four" />
         </div>
         <div className="landing-hero-overlay" aria-hidden="true" />
         <ForestFallingLeaves />
