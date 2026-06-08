@@ -4343,6 +4343,24 @@ function LandingPage() {
     anchorLinks.forEach((link) => link.addEventListener('click', handleAnchorClick));
 
     const ctx = gsap.context(() => {
+      gsap.set('.landing-bg-one', { opacity: 1, scale: 1 });
+      gsap.set('.landing-bg-two', { opacity: 0, scale: 1.15 });
+
+      gsap.timeline({
+        scrollTrigger: {
+          trigger: '.landing-hero',
+          start: 'top top',
+          end: () => window.matchMedia('(max-width: 640px)').matches ? '+=80%' : '+=105%',
+          scrub: 0.65,
+          pin: true,
+          anticipatePin: 1,
+          invalidateOnRefresh: true
+        }
+      })
+        .to('.landing-bg-one', { opacity: 0, scale: 0.94, filter: 'brightness(0.62) saturate(0.92)', ease: 'none' }, 0)
+        .to('.landing-bg-two', { opacity: 1, scale: 1, ease: 'none' }, 0)
+        .to('.landing-hero-overlay', { opacity: 0.92, ease: 'none' }, 0);
+
       gsap.from('.landing-hero-content > *', {
         y: 28,
         opacity: 0,
@@ -4396,6 +4414,11 @@ function LandingPage() {
       </nav>
 
       <section className="landing-hero hero-image-1">
+        <div className="landing-hero-background" aria-hidden="true">
+          <div className="landing-hero-bg landing-bg-one" />
+          <div className="landing-hero-bg landing-bg-two" />
+        </div>
+        <div className="landing-hero-overlay" aria-hidden="true" />
         <ForestFallingLeaves />
         <div className="landing-hero-content">
           <p className="landing-eyebrow">Tecnologia ambiental e regularização</p>
@@ -4420,9 +4443,6 @@ function LandingPage() {
             <strong>Atuação ambiental para imóveis e empresas</strong>
           </div>
         </div>
-      </section>
-      <section className="forest-panel forest-image-2" aria-label="Paisagem ambiental em sequência">
-        <ForestFallingLeaves />
       </section>
 
       <section className="landing-section landing-about landing-reveal" id="quem-somos">
