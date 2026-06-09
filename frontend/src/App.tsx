@@ -295,6 +295,7 @@ type DbProposalService = {
 type DbProposal = {
   id: string;
   proposal_number: string;
+  proposal_service_summary?: string | null;
   process_id: string;
   client_id: string;
   property_id: string | null;
@@ -330,6 +331,7 @@ type DbProposal = {
 type ProposalFormState = {
   id: string;
   date: string;
+  service: string;
   client: string;
   property: string;
   responsible: string;
@@ -1308,6 +1310,7 @@ const initialDocuments: DocumentRecord[] = [
 const emptyProposalForm: ProposalFormState = {
   id: '',
   date: '',
+  service: '',
   client: '',
   property: '',
   responsible: '',
@@ -1474,6 +1477,7 @@ const createProposalForm = (
   ...emptyProposalForm,
   id: buildProposalId(proposalsCount),
   date: new Date().toLocaleDateString('pt-BR'),
+  service: baseProposal?.service ?? process?.service ?? '',
   client: client?.name ?? process?.client ?? baseProposal?.client ?? '',
   property: process?.property ?? baseProposal?.property ?? '',
   phone: client?.phone ?? process?.clientPhone ?? baseProposal?.clientPhone ?? '',
@@ -2109,7 +2113,7 @@ function mapDbProposalToProposal(proposal: DbProposal): Proposal {
     clientPhone: proposal.client_phone ?? '',
     cityState: proposal.city_state ?? '',
     property: proposal.property_name ?? '',
-    service: services.map((service) => service.description).filter(Boolean).join(' + ') || proposal.processes?.service || 'Serviço ambiental',
+    service: proposal.proposal_service_summary ?? (services.map((service) => service.description).filter(Boolean).join(' + ') || proposal.processes?.service || 'Serviço ambiental'),
     services,
     value: formatCurrencyInput(totalValue),
     deadline: proposal.deadline ?? '',
@@ -3739,6 +3743,7 @@ export function App() {
     setProposalForm({
       id: proposal.id,
       date: proposal.createdAt,
+      service: proposal.service,
       client: proposal.client,
       property: proposal.property,
       responsible: proposal.responsible,
@@ -3785,7 +3790,7 @@ export function App() {
       clientPhone: proposalForm.phone || process.clientPhone,
       cityState: proposalForm.cityState,
       property: proposalForm.property || process.property,
-      service: proposalForm.services.map((service) => service.description).filter(Boolean).join(' + ') || process.service,
+      service: proposalForm.service.trim() || proposalForm.services.map((service) => service.description).filter(Boolean).join(' + ') || process.service,
       services: proposalForm.services.filter((service) => service.description.trim() || service.value.trim()),
       value: formatCurrencyInput(totalValue),
       deadline: proposalForm.deadline,
@@ -3825,6 +3830,7 @@ export function App() {
       if (editingProposal.dbId) {
         const updatePayload = {
           proposal_number: updatedProposal.id,
+          proposal_service_summary: updatedProposal.service || null,
           client_name: updatedProposal.client,
           client_phone: updatedProposal.clientPhone || null,
           property_name: updatedProposal.property || null,
@@ -3851,6 +3857,15 @@ export function App() {
 
         if (updateError && updateError.message.includes('proposal_objective')) {
           const { proposal_objective: _proposalObjective, ...legacyUpdatePayload } = updatePayload;
+          const retry = await supabase
+            .from('proposals')
+            .update(legacyUpdatePayload)
+            .eq('id', editingProposal.dbId);
+          updateError = retry.error;
+        }
+
+        if (updateError && updateError.message.includes('proposal_service_summary')) {
+          const { proposal_service_summary: _serviceSummary, ...legacyUpdatePayload } = updatePayload;
           const retry = await supabase
             .from('proposals')
             .update(legacyUpdatePayload)
@@ -3911,6 +3926,7 @@ export function App() {
     if (process.dbId && process.clientId) {
       const proposalPayload = {
         proposal_number: proposal.id,
+        proposal_service_summary: proposal.service || null,
         process_id: process.dbId,
         client_id: process.clientId,
         property_id: process.propertyId ?? null,
@@ -3944,6 +3960,17 @@ export function App() {
 
       if (proposalError && proposalError.message.includes('proposal_objective')) {
         const { proposal_objective: _proposalObjective, ...legacyProposalPayload } = proposalPayload;
+        const retry = await supabase
+          .from('proposals')
+          .insert(legacyProposalPayload)
+          .select('*')
+          .single();
+        insertedProposal = retry.data;
+        proposalError = retry.error;
+      }
+
+      if (proposalError && proposalError.message.includes('proposal_service_summary')) {
+        const { proposal_service_summary: _serviceSummary, ...legacyProposalPayload } = proposalPayload;
         const retry = await supabase
           .from('proposals')
           .insert(legacyProposalPayload)
@@ -4945,7 +4972,6 @@ export function App() {
           />
         ) : null}
       </main>
-      <WhatsAppFloatingButton />
       {appDialog ? <AppDialog dialog={appDialog} onResolve={resolveAppDialog} /> : null}
     </div>
   );
@@ -6868,7 +6894,10 @@ function ProposalFormModal({
       <div className="proposal-process-summary">
         <div><span>Cliente</span><strong>{process.client}</strong></div>
         <div><span>Processo</span><strong>{process.id}</strong></div>
-        <div><span>Serviço</span><strong>{process.service}</strong></div>
+        <label className="proposal-summary-service-field">
+          <span>Serviço</span>
+          <textarea value={form.service} onChange={(event) => onFieldChange('service', event.target.value)} placeholder="Resumo do serviço da proposta" />
+        </label>
         <div><span>Propriedade</span><strong>{process.property}</strong></div>
       </div>
 
