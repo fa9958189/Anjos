@@ -1472,21 +1472,22 @@ function buildProposalHtml(proposal: Proposal) {
   <title>${escapeHtml(proposal.id)} - ${escapeHtml(proposal.client)}</title>
   <style>
     @page { size: A4; margin: 16mm; }
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { margin: 0; color: #17291c; font-family: Arial, Helvetica, sans-serif; background: #eef5ea; }
     .proposal-page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 18mm; background: #fff; }
-    .proposal-header { display: grid; grid-template-columns: 1fr 1.15fr; gap: 18px; align-items: start; padding-bottom: 18px; border-bottom: 3px solid #1e4d2b; }
-    .brand { display: flex; gap: 12px; align-items: center; }
-    .brand-logo { width: 136px; height: auto; display: block; object-fit: contain; }
+    .proposal-header { display: grid; grid-template-columns: 170px 1fr; gap: 24px; align-items: start; padding-bottom: 18px; border-bottom: 3px solid #1e4d2b; }
+    .brand { display: flex; align-items: flex-start; }
+    .brand-logo { width: 158px; height: auto; display: block; object-fit: contain; }
     h1, h2, h3, p { margin: 0; }
     h1 { margin-top: 22px; color: #1e4d2b; font-size: 28px; text-align: center; letter-spacing: 0; }
     h2 { color: #14261a; font-size: 17px; }
     h3 { color: #1e4d2b; font-size: 13px; text-transform: uppercase; margin: 24px 0 10px; }
-    .company strong { display: block; color: #14261a; font-size: 20px; }
-    .company span, .contact span, .meta span { display: block; margin-top: 4px; color: #566557; font-size: 11px; line-height: 1.35; }
-    .contact { text-align: right; }
+    .company-info { text-align: right; }
+    .company-info strong { display: block; color: #14261a; font-size: 17px; line-height: 1.2; text-transform: uppercase; }
+    .company-info b { display: block; margin-top: 4px; color: #1e4d2b; font-size: 12px; line-height: 1.25; text-transform: uppercase; }
+    .company-info span, .meta span { display: block; margin-top: 4px; color: #566557; font-size: 11px; line-height: 1.35; }
     .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 20px; }
-    .meta div, .client-box, .payment-box, .text-box, .signature { border: 1px solid #dce8d6; border-radius: 10px; padding: 12px; background: #fbfdf8; }
+    .meta div, .client-box, .payment-box, .text-box { border: 1px solid #dce8d6; border-radius: 10px; padding: 12px; background: #fbfdf8; }
     .meta small, .client-grid small { display: block; color: #6b8b69; font-size: 10px; font-weight: 800; text-transform: uppercase; }
     .meta strong, .client-grid strong { display: block; margin-top: 5px; color: #14261a; font-size: 12px; }
     .client-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
@@ -1494,37 +1495,37 @@ function buildProposalHtml(proposal: Proposal) {
     th { background: #1e4d2b; color: #fff; font-size: 12px; text-align: left; padding: 11px; }
     td { border: 1px solid #dce8d6; padding: 11px; color: #314436; font-size: 12px; vertical-align: top; line-height: 1.45; }
     td:last-child, th:last-child { width: 34%; text-align: right; }
-    .total { display: flex; justify-content: flex-end; margin-top: 12px; }
-    .total div { min-width: 260px; padding: 14px; border-radius: 10px; background: #1e4d2b; color: #fff; text-align: right; }
-    .total span { display: block; font-size: 11px; text-transform: uppercase; opacity: .85; }
-    .total strong { display: block; margin-top: 4px; font-size: 24px; }
+    .total { margin-top: 14px; }
+    .total div { width: 100%; padding: 18px 20px; border-radius: 12px; background: #1e4d2b; color: #fff; text-align: center; }
+    .total span { display: block; font-size: 12px; font-weight: 800; text-transform: uppercase; opacity: .9; letter-spacing: 0; }
+    .total strong { display: block; margin-top: 5px; font-size: 30px; line-height: 1; }
     .payment-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .payment-box p { color: #314436; font-size: 12px; line-height: 1.55; }
     .payment-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .payment-list span { padding: 7px 10px; border-radius: 999px; background: #e8f6df; color: #246526; font-size: 11px; font-weight: 800; }
     .notes { color: #314436; font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
-    .signature { margin-top: 32px; text-align: center; }
-    .signature-line { width: 70%; height: 1px; margin: 42px auto 10px; background: #314436; }
-    .signature strong { display: block; color: #14261a; }
-    @media print { body { background: #fff; } .proposal-page { width: auto; min-height: auto; margin: 0; padding: 0; } }
+    .signatures { display: grid; grid-template-columns: repeat(2, 1fr); gap: 34px; margin-top: 54px; break-inside: avoid; page-break-inside: avoid; }
+    .signature { text-align: center; padding-top: 36px; }
+    .signature-line { display: block; width: 100%; height: 1.5px; margin: 0 auto 11px; background-color: #314436; }
+    .signature strong { display: block; color: #14261a; font-size: 12px; text-transform: uppercase; }
+    @media (max-width: 720px) { .proposal-header { grid-template-columns: 1fr; } .company-info { text-align: left; } .signatures { grid-template-columns: 1fr; gap: 18px; } }
+    @media print { body { background: #fff; } .proposal-page { width: auto; min-height: auto; margin: 0; padding: 0; } .signature-line { background-color: #314436 !important; } .total div { background: #1e4d2b !important; color: #fff !important; } }
   </style>
 </head>
 <body>
   <main class="proposal-page">
     <header class="proposal-header">
-      <div class="brand company">
+      <div class="brand">
         <img class="brand-logo" src="/assets/LogotipoEscura.png" alt="Anjos Soluções Ambientais" />
-        <div>
-          <strong>ANJOS AMBIENTAL</strong>
-          <span>Consultoria e Licenciamento Ambiental</span>
-          <span>CNPJ: 00.000.000/0001-00</span>
-        </div>
       </div>
-      <div class="contact">
-        <span>Endereço: Montes Claros/MG</span>
-        <span>Telefone: (38) 99999-0000</span>
-        <span>E-mail: contato@anjosambiental.com.br</span>
-        <span>Instagram: @anjosambiental</span>
+      <div class="company-info">
+        <strong>ANJOS AMBIENTAL CONSULTORIA LTDA</strong>
+        <b>ANJOS AMBIENTAL CONSULTORIA</b>
+        <span>CNPJ: 52.723.882/0001-17</span>
+        <span>Rua Dr. Francisco Ludovico de Almeida, nº 87, Quadra 17, Lote 7, Vila Santa Maria - Conjunto Caiçara, Goiânia/GO, CEP 74.775-011</span>
+        <span>Telefone: (63) 99203-6652</span>
+        <span>E-mail: ambientalanjos@gmail.com</span>
+        <span>Instagram: @ambientalanjos</span>
       </div>
     </header>
     <h1>PROPOSTA COMERCIAL</h1>
@@ -1563,9 +1564,15 @@ function buildProposalHtml(proposal: Proposal) {
     <h3>Condições de pagamento</h3>
     <section class="payment-box"><p>${escapeHtml(proposal.paymentTerms)}</p></section>
     ${observationsSection}
-    <section class="signature">
-      <div class="signature-line"></div>
-      <strong>ANJOS AMBIENTAL CONSULTORIA LTDA</strong>
+    <section class="signatures">
+      <div class="signature">
+        <div class="signature-line"></div>
+        <strong>ANJOS AMBIENTAL CONSULTORIA LTDA</strong>
+      </div>
+      <div class="signature">
+        <div class="signature-line"></div>
+        <strong>${escapeHtml(proposal.client)}</strong>
+      </div>
     </section>
   </main>
 </body>
@@ -7218,6 +7225,64 @@ function ContractModal({
     openContractPdf(generatedContract, true);
   }
 
+  const contractClauses: Array<{
+    number: string;
+    title: string;
+    description: string;
+    field: keyof ContractRecord;
+    placeholder?: string;
+  }> = [
+    {
+      number: '01',
+      title: 'Cláusula primeira - Do objeto',
+      description: 'Defina o escopo do serviço ambiental contratado.',
+      field: 'objectClause'
+    },
+    {
+      number: '02',
+      title: 'Cláusula segunda - Obrigações da contratada',
+      description: 'Revise as responsabilidades técnicas da Anjos Ambiental.',
+      field: 'contractedObligations'
+    },
+    {
+      number: '03',
+      title: 'Cláusula terceira - Obrigações da contratante',
+      description: 'Ajuste os deveres do cliente para viabilizar a execução.',
+      field: 'contractorObligations'
+    },
+    {
+      number: '04',
+      title: 'Cláusula quarta - Valor e pagamento',
+      description: 'Confira condições comerciais, valores e forma de pagamento.',
+      field: 'paymentClause'
+    },
+    {
+      number: '05',
+      title: 'Cláusula quinta - Prazo',
+      description: 'Revise prazos de execução, validade e entregas previstas.',
+      field: 'deadlineClause'
+    },
+    {
+      number: '06',
+      title: 'Cláusula sexta - Rescisão',
+      description: 'Mantenha claras as condições de encerramento contratual.',
+      field: 'terminationClause'
+    },
+    {
+      number: '07',
+      title: 'Cláusula sétima - Foro',
+      description: 'Defina o foro aplicável para solução de controvérsias.',
+      field: 'jurisdictionClause'
+    },
+    {
+      number: 'OBS',
+      title: 'Observações internas',
+      description: 'Registre orientações internas que não entram como cláusula jurídica principal.',
+      field: 'observations',
+      placeholder: 'Observações jurídicas internas...'
+    }
+  ];
+
   return (
     <form className="panel modal-card contract-modal" onSubmit={submit}>
       <div className="form-heading">
@@ -7262,16 +7327,31 @@ function ContractModal({
         </div>
       </div>
 
-      <div className="contract-clauses">
-        <label className="wide-field">Cláusula primeira - Do objeto<textarea value={form.objectClause} onChange={(event) => update('objectClause', event.target.value)} /></label>
-        <label className="wide-field">Cláusula segunda - Obrigações da contratada<textarea value={form.contractedObligations} onChange={(event) => update('contractedObligations', event.target.value)} /></label>
-        <label className="wide-field">Cláusula terceira - Obrigações da contratante<textarea value={form.contractorObligations} onChange={(event) => update('contractorObligations', event.target.value)} /></label>
-        <label className="wide-field">Cláusula quarta - Valor e pagamento<textarea value={form.paymentClause} onChange={(event) => update('paymentClause', event.target.value)} /></label>
-        <label className="wide-field">Cláusula quinta - Prazo<textarea value={form.deadlineClause} onChange={(event) => update('deadlineClause', event.target.value)} /></label>
-        <label className="wide-field">Cláusula sexta - Rescisão<textarea value={form.terminationClause} onChange={(event) => update('terminationClause', event.target.value)} /></label>
-        <label className="wide-field">Cláusula sétima - Foro<textarea value={form.jurisdictionClause} onChange={(event) => update('jurisdictionClause', event.target.value)} /></label>
-        <label className="wide-field">Observações internas<textarea value={form.observations} onChange={(event) => update('observations', event.target.value)} placeholder="Observações jurídicas internas..." /></label>
-      </div>
+      <section className="contract-clauses-section">
+        <div className="contract-clauses-heading">
+          <p className="eyebrow">Cláusulas contratuais</p>
+          <h3>Revise e ajuste os textos jurídicos antes de gerar o contrato.</h3>
+        </div>
+        <div className="contract-clauses">
+          {contractClauses.map((clause) => (
+            <label className="contract-clause-card" key={clause.field}>
+              <span className="contract-clause-header">
+                <span className="contract-clause-number">{clause.number}</span>
+                <span>
+                  <strong className="contract-clause-title">{clause.title}</strong>
+                  <small>{clause.description}</small>
+                </span>
+              </span>
+              <textarea
+                className="contract-clause-textarea"
+                value={String(form[clause.field] ?? '')}
+                onChange={(event) => update(clause.field, event.target.value as ContractRecord[typeof clause.field])}
+                placeholder={clause.placeholder}
+              />
+            </label>
+          ))}
+        </div>
+      </section>
 
       <div className="upload-dropzone compact real-upload">
         <UploadCloud size={22} />
