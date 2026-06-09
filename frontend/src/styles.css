@@ -2213,6 +2213,53 @@ a { color: inherit; text-decoration: none; }
   border-color: #e2b8ad;
   background: #fff5f2;
 }
+.proposal-version-chip {
+  width: fit-content;
+}
+.proposal-version-chip.active {
+  border-color: #b9dfaa;
+  background: #e8f6df;
+  color: #246526;
+}
+.proposal-version-chip.replaced {
+  border-color: #d8d0c2;
+  background: #f4f0e8;
+  color: #7a6b55;
+}
+.proposal-version-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 2px;
+}
+.proposal-version-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid #dfe8d8;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 9px 10px;
+  color: #314436;
+  text-align: left;
+  cursor: pointer;
+}
+.proposal-version-item span {
+  color: #14261a;
+  font-weight: 800;
+}
+.proposal-version-item strong {
+  color: #627063;
+  font-size: 0.78rem;
+}
+.proposal-version-item.active {
+  border-color: #b9dfaa;
+  background: #f4fbef;
+}
+.proposal-version-item.replaced {
+  background: #faf8f4;
+}
 .empty-state {
   padding: 18px;
   border: 1px dashed #c7dfbd;

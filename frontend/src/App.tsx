@@ -258,6 +258,7 @@ type Proposal = {
   processId: string;
   client: string;
   clientPhone: string;
+  cityState: string;
   property: string;
   service: string;
   services: ProposalServiceItem[];
@@ -274,6 +275,10 @@ type Proposal = {
   technicalNotes: string;
   observations: string;
   status: ProposalStatus;
+  isActive: boolean;
+  versionNumber: number;
+  replacedByProposalId?: string;
+  replacedAt?: string;
   createdAt: string;
   approvedAt?: string;
   contacts: CommercialContact[];
@@ -314,6 +319,10 @@ type DbProposal = {
   generated_at: string | null;
   approved_at: string | null;
   refused_at: string | null;
+  is_active?: boolean | null;
+  version_number?: number | null;
+  replaced_by_proposal_id?: string | null;
+  replaced_at?: string | null;
   proposal_services?: DbProposalService[];
   processes?: { process_number: string; service: string } | null;
 };
@@ -906,6 +915,7 @@ const initialProposals: Proposal[] = [
     processId: 'AMB-002/2026',
     client: 'Agro Veredas LTDA',
     clientPhone: '38988882200',
+    cityState: 'Grão Mogol/MG',
     property: 'Unidade Agro Veredas',
     service: 'CAR e regularização documental',
     services: [{ description: 'CAR e regularização documental', value: '3.800,00' }],
@@ -922,6 +932,8 @@ const initialProposals: Proposal[] = [
     technicalNotes: 'Conferência documental e preparação para protocolo.',
     observations: 'Proposta contempla conferência documental e preparação para protocolo.',
     status: 'Proposta gerada',
+    isActive: true,
+    versionNumber: 1,
     createdAt: '21/05/2026',
     contacts: [
       {
@@ -938,6 +950,7 @@ const initialProposals: Proposal[] = [
     processId: 'AMB-003/2026',
     client: 'Mariana Costa Almeida',
     clientPhone: '38977773300',
+    cityState: 'Janaúba/MG',
     property: 'Fazenda Lagoa Serena',
     service: 'Outorga de uso de água',
     services: [{ description: 'Outorga de uso de água', value: '4.500,00' }],
@@ -954,6 +967,8 @@ const initialProposals: Proposal[] = [
     technicalNotes: 'Atendimento prioritário para protocolo de outorga.',
     observations: 'Cliente solicitou prioridade no atendimento.',
     status: 'Proposta aprovada',
+    isActive: true,
+    versionNumber: 1,
     createdAt: '21/05/2026',
     approvedAt: '21/05/2026',
     contacts: [
@@ -1447,17 +1462,32 @@ const calculateProposalTotal = (services: ProposalServiceItem[]) =>
 
 const buildProposalId = (count: number) => 'PROP' + String(count + 1).padStart(3, '0') + '/' + new Date().getFullYear();
 
-const createProposalForm = (process: EnvironmentalProcess | null, proposalsCount: number): ProposalFormState => ({
+const getClientCityState = (client?: Pick<Client, 'city' | 'state'> | null) =>
+  [client?.city, client?.state].filter(Boolean).join('/');
+
+const createProposalForm = (
+  process: EnvironmentalProcess | null,
+  proposalsCount: number,
+  client?: Client | null,
+  baseProposal?: Proposal | null
+): ProposalFormState => ({
   ...emptyProposalForm,
   id: buildProposalId(proposalsCount),
   date: new Date().toLocaleDateString('pt-BR'),
-  client: process?.client ?? '',
-  property: process?.property ?? '',
-  phone: process?.clientPhone ?? '',
-  cityState: 'Montes Claros/MG',
-  services: [{ description: process?.service ?? '', value: '' }],
-  technicalNotes: process?.analysis.technicalOpinion ?? '',
-  responsible: 'Comercial'
+  client: client?.name ?? process?.client ?? baseProposal?.client ?? '',
+  property: process?.property ?? baseProposal?.property ?? '',
+  phone: client?.phone ?? process?.clientPhone ?? baseProposal?.clientPhone ?? '',
+  cityState: getClientCityState(client) || baseProposal?.cityState || '',
+  services: baseProposal?.services?.length ? baseProposal.services : [{ description: process?.service ?? baseProposal?.service ?? '', value: '' }],
+  technicalNotes: process?.analysis.technicalOpinion ?? baseProposal?.technicalNotes ?? '',
+  entryPercentage: baseProposal?.entryPercentage ?? emptyProposalForm.entryPercentage,
+  paymentMethods: baseProposal?.paymentMethods?.length ? baseProposal.paymentMethods : emptyProposalForm.paymentMethods,
+  paymentTerms: baseProposal?.paymentTerms ?? emptyProposalForm.paymentTerms,
+  deadline: baseProposal?.deadline ?? '',
+  validity: baseProposal?.validity ?? emptyProposalForm.validity,
+  proposalObjective: baseProposal?.proposalObjective ?? '',
+  observations: baseProposal?.observations ?? '',
+  responsible: baseProposal?.responsible ?? 'Comercial'
 });
 
 const getAnalysisDisplay = (status: TechnicalAnalysis['status']) => (status === 'Em análise' ? 'Analisar' : status);
@@ -1467,6 +1497,16 @@ const getAnalysisStatusClass = (status: TechnicalAnalysis['status']) =>
 
 const getProposalStatusClass = (status: ProposalStatus) =>
   'proposal-status-' + normalizeText(status).replace(/\s/g, '-');
+
+const isProposalActive = (proposal: Proposal) => proposal.isActive !== false;
+
+const getProposalVersionLabel = (proposal: Proposal) =>
+  proposal.versionNumber > 1 ? `Versão ${proposal.versionNumber}` : 'Versão 1';
+
+function getActiveProposalForProcess(proposals: Proposal[], processId: string) {
+  const processProposals = proposals.filter((proposal) => proposal.processId === processId);
+  return processProposals.find(isProposalActive) ?? processProposals[0] ?? null;
+}
 
 const escapeHtml = (value: string) =>
   value
@@ -1569,7 +1609,7 @@ function buildProposalHtml(proposal: Proposal) {
       <div><small>Nome</small><strong>${escapeHtml(proposal.client)}</strong></div>
       <div><small>Telefone</small><strong>${escapeHtml(proposal.clientPhone)}</strong></div>
       <div><small>Propriedade</small><strong>${escapeHtml(proposal.property)}</strong></div>
-      <div><small>Município</small><strong>Montes Claros/MG</strong></div>
+      <div><small>Município</small><strong>${escapeHtml(proposal.cityState || 'Não informado')}</strong></div>
     </section>
     ${objectiveSection}
     <h3>Serviços</h3>
@@ -2067,6 +2107,7 @@ function mapDbProposalToProposal(proposal: DbProposal): Proposal {
     processId: proposal.processes?.process_number ?? proposal.process_id,
     client: proposal.client_name,
     clientPhone: proposal.client_phone ?? '',
+    cityState: proposal.city_state ?? '',
     property: proposal.property_name ?? '',
     service: services.map((service) => service.description).filter(Boolean).join(' + ') || proposal.processes?.service || 'Serviço ambiental',
     services,
@@ -2083,6 +2124,10 @@ function mapDbProposalToProposal(proposal: DbProposal): Proposal {
     technicalNotes: proposal.technical_notes ?? '',
     observations: proposal.observations ?? '',
     status: mapDbProposalStatus(proposal.status),
+    isActive: proposal.is_active !== false,
+    versionNumber: Number(proposal.version_number ?? 1),
+    replacedByProposalId: proposal.replaced_by_proposal_id ?? undefined,
+    replacedAt: proposal.replaced_at ? formatDateBR(proposal.replaced_at) : undefined,
     createdAt: formatDateBR(proposal.proposal_date ?? proposal.generated_at),
     approvedAt: proposal.approved_at ? formatDateBR(proposal.approved_at) : undefined,
     contacts: []
@@ -3155,10 +3200,24 @@ export function App() {
       .select('*')
       .single();
 
+    const nextClient = updatedClient && !updateError ? mapDbClientToClient(updatedClient as DbClient) : { id: clientId, ...updates } as Client;
+
     setClients((current) => current.map((client) => {
       if (client.id !== clientId) return client;
-      return updatedClient && !updateError ? mapDbClientToClient(updatedClient as DbClient) : { ...client, ...updates };
+      return { ...client, ...nextClient };
     }));
+
+    setProcesses((current) =>
+      current.map((process) =>
+        process.clientId === clientId
+          ? {
+              ...process,
+              client: nextClient.name,
+              clientPhone: nextClient.phone
+            }
+          : process
+      )
+    );
   }
 
   async function attachClientDocuments(client: Client, fileItems: DocumentUploadItem[], category: string) {
@@ -3650,10 +3709,22 @@ export function App() {
     }
   }
 
-  function openProposalForm(processId: string) {
+  async function openProposalForm(processId: string, baseProposalId?: string) {
     const process = processes.find((item) => item.id === processId) ?? null;
+    const baseProposal = baseProposalId ? proposals.find((proposal) => proposal.id === baseProposalId) ?? null : null;
+    if (baseProposal) {
+      const shouldCreateVersion = await showAppConfirm({
+        title: 'Gerar nova proposta',
+        message: 'Uma nova proposta será criada usando os dados atuais do cliente e do processo. A proposta anterior continuará salva como histórico, mas a nova proposta passará a ser a versão ativa.',
+        type: 'warning',
+        confirmText: 'Gerar nova proposta',
+        cancelText: 'Cancelar'
+      });
+      if (!shouldCreateVersion) return;
+    }
+    const currentClient = process?.clientId ? clients.find((client) => client.id === process.clientId) ?? null : null;
     setSelectedProposalProcessId(processId);
-    setProposalForm(createProposalForm(process, proposals.length));
+    setProposalForm(createProposalForm(process, proposals.length, currentClient, baseProposal));
   }
 
   function closeProposalForm() {
@@ -3678,6 +3749,7 @@ export function App() {
       processId: process.id,
       client: proposalForm.client || process.client,
       clientPhone: proposalForm.phone || process.clientPhone,
+      cityState: proposalForm.cityState,
       property: proposalForm.property || process.property,
       service: proposalForm.services.map((service) => service.description).filter(Boolean).join(' + ') || process.service,
       services: proposalForm.services.filter((service) => service.description.trim() || service.value.trim()),
@@ -3694,9 +3766,12 @@ export function App() {
       technicalNotes: proposalForm.technicalNotes,
       observations: proposalForm.observations,
       status: 'Proposta gerada',
+      isActive: true,
+      versionNumber: Math.max(0, ...proposals.filter((item) => item.processId === process.id).map((item) => item.versionNumber || 1)) + 1,
       createdAt: proposalForm.date || new Date().toLocaleDateString('pt-BR'),
       contacts: []
     };
+    const previousActiveProposals = proposals.filter((item) => item.processId === process.id && isProposalActive(item));
 
     if (process.dbId && process.clientId) {
       const proposalPayload = {
@@ -3721,7 +3796,9 @@ export function App() {
         validity: proposal.validity || null,
         proposal_objective: proposal.proposalObjective || null,
         technical_notes: proposal.technicalNotes || null,
-        observations: proposal.observations || null
+        observations: proposal.observations || null,
+        is_active: true,
+        version_number: proposal.versionNumber
       };
 
       let { data: insertedProposal, error: proposalError } = await supabase
@@ -3732,6 +3809,17 @@ export function App() {
 
       if (proposalError && proposalError.message.includes('proposal_objective')) {
         const { proposal_objective: _proposalObjective, ...legacyProposalPayload } = proposalPayload;
+        const retry = await supabase
+          .from('proposals')
+          .insert(legacyProposalPayload)
+          .select('*')
+          .single();
+        insertedProposal = retry.data;
+        proposalError = retry.error;
+      }
+
+      if (proposalError && (proposalError.message.includes('is_active') || proposalError.message.includes('version_number'))) {
+        const { is_active: _isActive, version_number: _versionNumber, ...legacyProposalPayload } = proposalPayload;
         const retry = await supabase
           .from('proposals')
           .insert(legacyProposalPayload)
@@ -3762,10 +3850,38 @@ export function App() {
           .eq('id', process.dbId);
 
         proposal.dbId = insertedProposal.id;
+
+        const previousProposalDbIds = previousActiveProposals.map((item) => item.dbId).filter(Boolean) as string[];
+        if (previousProposalDbIds.length > 0) {
+          const { error: versionError } = await supabase
+            .from('proposals')
+            .update({
+              is_active: false,
+              replaced_by_proposal_id: insertedProposal.id,
+              replaced_at: new Date().toISOString()
+            })
+            .in('id', previousProposalDbIds);
+
+          if (versionError && !versionError.message.includes('is_active')) {
+            console.warn('[Propostas] Não foi possível marcar versões anteriores como substituídas', versionError);
+          }
+        }
       }
     }
 
-    setProposals((current) => [proposal, ...current]);
+    setProposals((current) => [
+      proposal,
+      ...current.map((item) =>
+        item.processId === process.id && isProposalActive(item)
+          ? {
+              ...item,
+              isActive: false,
+              replacedByProposalId: proposal.dbId,
+              replacedAt: new Date().toLocaleDateString('pt-BR')
+            }
+          : item
+      )
+    ]);
     openProposalPdf(proposal, true);
     closeProposalForm();
     if (proposal.dbId) {
@@ -3774,10 +3890,25 @@ export function App() {
   }
 
   async function approveProposal(proposalId: string) {
-    const shouldApprove = window.confirm('Deseja aprovar esta proposta?');
-    if (!shouldApprove) return;
     const approvalDate = new Date().toLocaleDateString('pt-BR');
     const proposalToApprove = proposals.find((proposal) => proposal.id === proposalId);
+    if (proposalToApprove && !isProposalActive(proposalToApprove)) {
+      await showAppAlert({
+        title: 'Proposta substituída',
+        message: 'Esta proposta foi substituída por uma versão mais recente. Use a proposta ativa para continuar o fluxo.',
+        type: 'warning',
+        confirmText: 'OK'
+      });
+      return;
+    }
+    const shouldApprove = await showAppConfirm({
+      title: 'Aprovar proposta',
+      message: 'Deseja aprovar esta proposta e encaminhar o processo para elaboração de contrato?',
+      type: 'info',
+      confirmText: 'Aprovar proposta',
+      cancelText: 'Cancelar'
+    });
+    if (!shouldApprove) return;
 
     if (proposalToApprove?.dbId) {
       await supabase
@@ -6366,7 +6497,7 @@ function ProposalsView({
   proposals: Proposal[];
   selectedProcessId: string | null;
   form: ProposalFormState;
-  onOpenProposal: (processId: string) => void;
+  onOpenProposal: (processId: string, baseProposalId?: string) => void | Promise<void>;
   onCloseProposal: () => void;
   onFieldChange: <K extends keyof ProposalFormState>(field: K, value: ProposalFormState[K]) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
@@ -6376,9 +6507,13 @@ function ProposalsView({
   const [proposalFilter, setProposalFilter] = useState<ProposalStatus | 'Todos'>('Gerar proposta');
   const proposalRows = processes
     .filter((process) => process.status === 'Aguardando proposta' || process.analysis.status === 'Aprovado')
-    .map((process) => ({ process, proposal: proposals.find((proposal) => proposal.processId === process.id) ?? null }));
+    .map((process) => ({
+      process,
+      proposal: getActiveProposalForProcess(proposals, process.id),
+      history: proposals.filter((proposal) => proposal.processId === process.id)
+    }));
   const readyProcesses = proposalRows.filter((row) => !row.proposal).map((row) => row.process);
-  const selectedProcess = readyProcesses.find((process) => process.id === selectedProcessId) ?? null;
+  const selectedProcess = processes.find((process) => process.id === selectedProcessId) ?? null;
   const filteredProposalRows = proposalRows.filter(({ process, proposal }) => {
     const term = normalizeText(search.trim());
     const rowStatus: ProposalStatus = proposal?.status ?? 'Gerar proposta';
@@ -6434,7 +6569,7 @@ function ProposalsView({
             </div>
           </div>
           <div className="proposal-ready-list">
-            {filteredProposalRows.map(({ process, proposal }) => (
+            {filteredProposalRows.map(({ process, proposal, history }) => (
               <div className={'proposal-ready-card ' + (proposal ? 'proposal-state-' + normalizeText(proposal.status).replace(/\s/g, '-') : 'proposal-state-gerar-proposta')} key={process.id}>
                 <div>
                   <strong>{process.id}</strong>
@@ -6446,6 +6581,11 @@ function ProposalsView({
                     {proposal ? proposal.status : 'Gerar proposta'}
                   </span>
                   {proposal ? (
+                    <span className={'status-chip proposal-version-chip ' + (isProposalActive(proposal) ? 'active' : 'replaced')}>
+                      {isProposalActive(proposal) ? 'Ativa' : 'Substituída'}
+                    </span>
+                  ) : null}
+                  {proposal ? (
                     <small>{proposal.id} - {formatCurrency(parseCurrency(proposal.value))}</small>
                   ) : (
                     <button className="primary-button dark" type="button" onClick={() => onOpenProposal(process.id)}>
@@ -6456,6 +6596,7 @@ function ProposalsView({
                 {proposal ? (
                   <div className="proposal-generated-summary">
                     <span>Número <strong>{proposal.id}</strong></span>
+                    <span>Versão <strong>{getProposalVersionLabel(proposal)}</strong></span>
                     <span>Valor <strong>{formatCurrency(parseCurrency(proposal.value))}</strong></span>
                     <span>Data <strong>{proposal.createdAt}</strong></span>
                     {proposal.approvedAt ? <span>Aprovação <strong>{proposal.approvedAt}</strong></span> : null}
@@ -6466,12 +6607,30 @@ function ProposalsView({
                       <button type="button" className="primary-button dark" onClick={() => openProposalPdf(proposal, true)}>
                         <Download size={17} /> Baixar PDF
                       </button>
-                      {proposal.status === 'Proposta gerada' ? (
+                      <button type="button" className="secondary-light-button" onClick={() => onOpenProposal(process.id, proposal.id)}>
+                        <FilePlus size={17} /> Gerar nova versão
+                      </button>
+                      {proposal.status === 'Proposta gerada' && isProposalActive(proposal) ? (
                         <button type="button" className="primary-button approve-proposal-button" onClick={() => onApproveProposal(proposal.id)}>
                           <ClipboardCheck size={17} /> Aprovar proposta
                         </button>
                       ) : null}
                     </div>
+                    {history.length > 1 ? (
+                      <div className="proposal-version-list">
+                        {history.map((version) => (
+                          <button
+                            className={'proposal-version-item ' + (isProposalActive(version) ? 'active' : 'replaced')}
+                            key={version.id}
+                            type="button"
+                            onClick={() => openProposalPdf(version)}
+                          >
+                            <span>{version.id}</span>
+                            <strong>{isProposalActive(version) ? 'Ativa' : 'Substituída'}</strong>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -7087,7 +7246,7 @@ function ContractsView({
   onSave: (contract: ContractRecord) => void | Promise<void>;
   onActivateContract: (contractId: string) => void | Promise<void>;
 }) {
-  const contractQueueProposals = proposals.filter((proposal) => proposal.status === 'Proposta aprovada');
+  const contractQueueProposals = proposals.filter((proposal) => proposal.status === 'Proposta aprovada' && isProposalActive(proposal));
   const pendingContractProposals = contractQueueProposals.filter((proposal) => !contracts.some((contract) => contract.proposalId === proposal.id));
   const selectedProposal = contractQueueProposals.find((proposal) => proposal.id === selectedProposalId) ?? null;
   const selectedContract = contracts.find((contract) => contract.id === selectedContractId) ?? null;
