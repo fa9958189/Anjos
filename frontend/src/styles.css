@@ -1648,6 +1648,14 @@ a { color: inherit; text-decoration: none; }
   border-color: #72b043;
   background: #f2faed;
 }
+.danger-icon-button {
+  color: #9d2b1f;
+}
+.danger-icon-button:hover {
+  border-color: #e2b8ad;
+  background: #fff5f2;
+  color: #7f1d1d;
+}
 .client-documents-modal {
   width: min(1080px, 100%);
 }

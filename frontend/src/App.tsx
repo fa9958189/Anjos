@@ -258,6 +258,7 @@ type Proposal = {
   remainingValue: string;
   validity: string;
   responsible: string;
+  proposalObjective: string;
   technicalNotes: string;
   observations: string;
   status: ProposalStatus;
@@ -295,6 +296,7 @@ type DbProposal = {
   payment_terms: string | null;
   deadline: string | null;
   validity: string | null;
+  proposal_objective?: string | null;
   technical_notes: string | null;
   observations: string | null;
   generated_at: string | null;
@@ -319,6 +321,7 @@ type ProposalFormState = {
   paymentTerms: string;
   deadline: string;
   validity: string;
+  proposalObjective: string;
   observations: string;
 };
 
@@ -903,6 +906,7 @@ const initialProposals: Proposal[] = [
     remainingValue: '1.900,00',
     validity: '15 dias',
     responsible: 'Comercial',
+    proposalObjective: '',
     technicalNotes: 'Conferência documental e preparação para protocolo.',
     observations: 'Proposta contempla conferência documental e preparação para protocolo.',
     status: 'Proposta gerada',
@@ -934,6 +938,7 @@ const initialProposals: Proposal[] = [
     remainingValue: '2.700,00',
     validity: '10 dias',
     responsible: 'Comercial',
+    proposalObjective: '',
     technicalNotes: 'Atendimento prioritário para protocolo de outorga.',
     observations: 'Cliente solicitou prioridade no atendimento.',
     status: 'Proposta aprovada',
@@ -1288,6 +1293,7 @@ const emptyProposalForm: ProposalFormState = {
   paymentTerms: 'Sinal de 50% e o valor restante após a conclusão.',
   deadline: '',
   validity: '15 dias',
+  proposalObjective: '',
   observations: ''
 };
 
@@ -1436,6 +1442,16 @@ function buildProposalHtml(proposal: Proposal) {
       <td>${formatCurrency(parseCurrency(service.value))}</td>
     </tr>
   `).join('');
+  const objectiveSection = proposal.proposalObjective.trim()
+    ? `
+    <h3>Objetivo da proposta</h3>
+    <section class="text-box"><p class="notes">${escapeHtml(proposal.proposalObjective)}</p></section>`
+    : '';
+  const observationsSection = proposal.observations.trim()
+    ? `
+    <h3>Observações</h3>
+    <section class="text-box"><p class="notes">${escapeHtml(proposal.observations)}</p></section>`
+    : '';
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -1458,7 +1474,7 @@ function buildProposalHtml(proposal: Proposal) {
     .company span, .contact span, .meta span { display: block; margin-top: 4px; color: #566557; font-size: 11px; line-height: 1.35; }
     .contact { text-align: right; }
     .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 20px; }
-    .meta div, .client-box, .payment-box, .signature { border: 1px solid #dce8d6; border-radius: 10px; padding: 12px; background: #fbfdf8; }
+    .meta div, .client-box, .payment-box, .text-box, .signature { border: 1px solid #dce8d6; border-radius: 10px; padding: 12px; background: #fbfdf8; }
     .meta small, .client-grid small { display: block; color: #6b8b69; font-size: 10px; font-weight: 800; text-transform: uppercase; }
     .meta strong, .client-grid strong { display: block; margin-top: 5px; color: #14261a; font-size: 12px; }
     .client-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
@@ -1499,7 +1515,7 @@ function buildProposalHtml(proposal: Proposal) {
         <span>Instagram: @anjosambiental</span>
       </div>
     </header>
-    <h1>PROPOSTA COMERCIAL Nº ${escapeHtml(proposal.id.replace('PROP', ''))}</h1>
+    <h1>PROPOSTA COMERCIAL</h1>
     <section class="meta">
       <div><small>Data</small><strong>${escapeHtml(proposal.createdAt)}</strong></div>
       <div><small>Validade</small><strong>${escapeHtml(proposal.validity)}</strong></div>
@@ -1513,6 +1529,7 @@ function buildProposalHtml(proposal: Proposal) {
       <div><small>Propriedade</small><strong>${escapeHtml(proposal.property)}</strong></div>
       <div><small>Município</small><strong>Montes Claros/MG</strong></div>
     </section>
+    ${objectiveSection}
     <h3>Serviços</h3>
     <table>
       <thead><tr><th>Descrição</th><th>Valor</th></tr></thead>
@@ -1533,8 +1550,7 @@ function buildProposalHtml(proposal: Proposal) {
     </section>
     <h3>Condições de pagamento</h3>
     <section class="payment-box"><p>${escapeHtml(proposal.paymentTerms)}</p></section>
-    <h3>Observações técnicas</h3>
-    <p class="notes">${escapeHtml(proposal.technicalNotes || proposal.observations || 'Sem observações adicionais.')}</p>
+    ${observationsSection}
     <section class="signature">
       <div class="signature-line"></div>
       <strong>ANJOS AMBIENTAL CONSULTORIA LTDA</strong>
@@ -2015,6 +2031,7 @@ function mapDbProposalToProposal(proposal: DbProposal): Proposal {
     remainingValue: formatCurrencyInput(remainingValue),
     validity: proposal.validity ?? '',
     responsible: proposal.responsible ?? 'Comercial',
+    proposalObjective: proposal.proposal_objective ?? '',
     technicalNotes: proposal.technical_notes ?? '',
     observations: proposal.observations ?? '',
     status: mapDbProposalStatus(proposal.status),
@@ -2377,6 +2394,10 @@ function isUuid(value: string | undefined) {
   return Boolean(value?.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i));
 }
 
+function uniqueValues(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))];
+}
+
 function mapDbFinancialRecordToFinancialRecord(record: DbFinancialRecord): FinancialRecord {
   return {
     id: record.id,
@@ -2603,6 +2624,7 @@ export function App() {
   const [loginSubmitting, setLoginSubmitting] = useState(false);
   const [loginForm, setLoginForm] = useState<LoginFormState>({ email: '', password: '' });
   const [loginError, setLoginError] = useState('');
+  const [authUserEmail, setAuthUserEmail] = useState<string | null>(null);
   const [dashboardState, setDashboardState] = useState<DashboardState>({ status: 'loading', data: null });
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewKey>('Dashboard');
@@ -2658,12 +2680,14 @@ export function App() {
       if (!isMounted) return;
       setIsAuthenticated(Boolean(sessionData.session));
       setAuthUserId(sessionData.session?.user.id ?? null);
+      setAuthUserEmail(sessionData.session?.user.email ?? null);
       setAuthLoading(false);
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(Boolean(session));
       setAuthUserId(session?.user.id ?? null);
+      setAuthUserEmail(session?.user.email ?? null);
       setAuthLoading(false);
     });
 
@@ -2788,6 +2812,8 @@ export function App() {
       { label: 'Processos atrasados', value: summary.delayedProcesses, display: String(summary.delayedProcesses), icon: Bell, tone: 'orange' }
     ].filter((card) => card.value > 0);
   }, [dashboardState.data]);
+  const currentSystemUser = users.find((user) => user.email.toLowerCase() === authUserEmail?.toLowerCase());
+  const canDeleteClients = currentSystemUser?.role === 'Admin';
 
   const filteredClients = useMemo(() => {
     const term = clientSearch.trim().toLowerCase();
@@ -2835,6 +2861,8 @@ export function App() {
   async function handleLogout() {
     await supabase.auth.signOut();
     setIsAuthenticated(false);
+    setAuthUserId(null);
+    setAuthUserEmail(null);
     setLoginForm({ email: '', password: '' });
     setActiveView('Dashboard');
     setMenuOpen(false);
@@ -3236,6 +3264,190 @@ export function App() {
     return true;
   }
 
+  async function selectIdsByColumn(table: string, column: string, values: string[]) {
+    const filterValues = uniqueValues(values);
+    if (filterValues.length === 0) return [];
+
+    const { data, error } = await supabase
+      .from(table)
+      .select('id')
+      .in(column, filterValues);
+
+    if (error) throw new Error(`Erro ao consultar ${table}.${column}: ${error.message}`);
+    return uniqueValues((data ?? []).map((row) => (row as { id?: string }).id));
+  }
+
+  async function selectDocumentRowsByColumn(column: string, values: string[]) {
+    const filterValues = uniqueValues(values);
+    if (filterValues.length === 0) return [] as Array<{ id: string; file_path: string | null }>;
+
+    const { data, error } = await supabase
+      .from('documents')
+      .select('id, file_path')
+      .in(column, filterValues);
+
+    if (error) throw new Error(`Erro ao consultar documentos por ${column}: ${error.message}`);
+    return (data ?? []) as Array<{ id: string; file_path: string | null }>;
+  }
+
+  async function deleteByIds(table: string, ids: string[]) {
+    const targetIds = uniqueValues(ids).filter(isUuid);
+    if (targetIds.length === 0) return;
+
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .in('id', targetIds);
+
+    if (error) throw new Error(`Erro ao excluir registros de ${table}: ${error.message}`);
+  }
+
+  async function deleteByColumn(table: string, column: string, values: string[]) {
+    const filterValues = uniqueValues(values);
+    if (filterValues.length === 0) return;
+
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .in(column, filterValues);
+
+    if (error) throw new Error(`Erro ao excluir registros de ${table}: ${error.message}`);
+  }
+
+  async function removeStoredDocuments(documentRows: Array<{ id?: string; file_path?: string | null }>) {
+    const pathsByBucket = new Map<string, string[]>();
+
+    documentRows.forEach((document) => {
+      const storageLocation = parseStoredDocumentPath(document.file_path);
+      if (!storageLocation.bucket || !storageLocation.storagePath) return;
+      pathsByBucket.set(storageLocation.bucket, [...(pathsByBucket.get(storageLocation.bucket) ?? []), storageLocation.storagePath]);
+    });
+
+    for (const [bucket, paths] of pathsByBucket) {
+      const targetPaths = uniqueValues(paths);
+      if (targetPaths.length === 0) continue;
+
+      const { error } = await supabase.storage.from(bucket).remove(targetPaths);
+      if (error) throw new Error(`Erro ao remover arquivos do bucket ${bucket}: ${error.message}`);
+    }
+  }
+
+  async function deleteClient(clientId: string) {
+    const selectedClient = clients.find((client) => client.id === clientId);
+    if (!selectedClient) return;
+
+    const shouldDelete = window.confirm(
+      'Tem certeza que deseja excluir este cliente? Essa ação vai apagar também propriedades, processos, documentos, propostas, contratos, financeiro e execução vinculados a este cliente. Essa ação não poderá ser desfeita.'
+    );
+    if (!shouldDelete) return;
+
+    const clientDbId = isUuid(selectedClient.id) ? selectedClient.id : undefined;
+    const localProcesses = processes.filter((process) => process.clientId === clientDbId || process.client === selectedClient.name);
+    const localProcessDbIds = localProcesses.map((process) => process.dbId);
+    const localProcessIds = localProcesses.map((process) => process.id);
+
+    try {
+      const processDbIds = uniqueValues([
+        ...localProcessDbIds,
+        ...(clientDbId ? await selectIdsByColumn('processes', 'client_id', [clientDbId]) : [])
+      ]);
+      const propertyDbIds = uniqueValues([
+        ...localProcesses.map((process) => process.propertyId),
+        ...(clientDbId ? await selectIdsByColumn('properties', 'client_id', [clientDbId]) : [])
+      ]);
+      const proposalDbIds = uniqueValues([
+        ...proposals
+          .filter((proposal) => proposal.client === selectedClient.name || localProcessIds.includes(proposal.processId))
+          .map((proposal) => proposal.dbId),
+        ...(clientDbId ? await selectIdsByColumn('proposals', 'client_id', [clientDbId]) : []),
+        ...(processDbIds.length > 0 ? await selectIdsByColumn('proposals', 'process_id', processDbIds) : [])
+      ]);
+      const contractDbIds = uniqueValues([
+        ...contracts
+          .filter((contract) => contract.clientDbId === clientDbId || contract.client === selectedClient.name || localProcessIds.includes(contract.processId))
+          .map((contract) => contract.dbId),
+        ...(clientDbId ? await selectIdsByColumn('contracts', 'client_id', [clientDbId]) : []),
+        ...(processDbIds.length > 0 ? await selectIdsByColumn('contracts', 'process_id', processDbIds) : []),
+        ...(proposalDbIds.length > 0 ? await selectIdsByColumn('contracts', 'proposal_id', proposalDbIds) : [])
+      ]);
+      const financialRecordIds = uniqueValues([
+        ...financialRecords
+          .filter((record) => record.clientDbId === clientDbId || record.client === selectedClient.name || localProcessIds.includes(record.processId))
+          .map((record) => record.id),
+        ...(clientDbId ? await selectIdsByColumn('financial_records', 'client_id', [clientDbId]) : []),
+        ...(processDbIds.length > 0 ? await selectIdsByColumn('financial_records', 'process_id', processDbIds) : []),
+        ...(proposalDbIds.length > 0 ? await selectIdsByColumn('financial_records', 'proposal_id', proposalDbIds) : []),
+        ...(contractDbIds.length > 0 ? await selectIdsByColumn('financial_records', 'contract_id', contractDbIds) : [])
+      ]);
+      const executionDbIds = uniqueValues([
+        ...executionRecords
+          .filter((record) => processDbIds.includes(record.processDbId ?? '') || localProcessIds.includes(record.processId))
+          .map((record) => record.dbId),
+        ...(processDbIds.length > 0 ? await selectIdsByColumn('executions', 'process_id', processDbIds) : [])
+      ]);
+      const commercialFollowupIds = uniqueValues([
+        ...(clientDbId ? await selectIdsByColumn('commercial_followups', 'client_id', [clientDbId]) : []),
+        ...(processDbIds.length > 0 ? await selectIdsByColumn('commercial_followups', 'process_id', processDbIds) : []),
+        ...(proposalDbIds.length > 0 ? await selectIdsByColumn('commercial_followups', 'proposal_id', proposalDbIds) : [])
+      ]);
+      const documentRows = [
+        ...(clientDbId ? await selectDocumentRowsByColumn('client_id', [clientDbId]) : []),
+        ...(processDbIds.length > 0 ? await selectDocumentRowsByColumn('process_id', processDbIds) : []),
+        ...(propertyDbIds.length > 0 ? await selectDocumentRowsByColumn('property_id', propertyDbIds) : []),
+        ...documents
+          .filter((document) => document.client === selectedClient.name || localProcessIds.includes(document.processId))
+          .map((document) => ({
+            id: document.dbId ?? document.id,
+            file_path: document.bucket && document.storagePath ? buildStoredDocumentPath(document.bucket, document.storagePath) : null
+          }))
+      ];
+      const documentIds = uniqueValues(documentRows.map((document) => document.id));
+
+      await removeStoredDocuments(documentRows);
+      await deleteByColumn('execution_tasks', 'execution_id', executionDbIds);
+      await deleteByColumn('field_visits', 'execution_id', executionDbIds);
+      await deleteByColumn('field_checklist_items', 'execution_id', executionDbIds);
+      await deleteByColumn('execution_history', 'execution_id', executionDbIds);
+      await deleteByColumn('execution_notes', 'execution_id', executionDbIds);
+      await deleteByIds('financial_records', financialRecordIds);
+      await deleteByIds('documents', documentIds);
+      await deleteByIds('commercial_followups', commercialFollowupIds);
+      await deleteByColumn('proposal_services', 'proposal_id', proposalDbIds);
+      await deleteByIds('contracts', contractDbIds);
+      await deleteByIds('proposals', proposalDbIds);
+      await deleteByColumn('technical_analyses', 'process_id', processDbIds);
+      await deleteByIds('executions', executionDbIds);
+      await deleteByIds('processes', processDbIds);
+      await deleteByIds('properties', propertyDbIds);
+      if (clientDbId) await deleteByIds('clients', [clientDbId]);
+
+      setClients((current) => current.filter((client) => client.id !== selectedClient.id));
+      setProcesses((current) => current.filter((process) => process.clientId !== clientDbId && process.client !== selectedClient.name));
+      setDocuments((current) => current.filter((document) => !documentIds.includes(document.dbId ?? document.id) && document.client !== selectedClient.name && !localProcessIds.includes(document.processId)));
+      setProposals((current) => current.filter((proposal) => !proposalDbIds.includes(proposal.dbId ?? '') && proposal.client !== selectedClient.name && !localProcessIds.includes(proposal.processId)));
+      setContracts((current) => current.filter((contract) => !contractDbIds.includes(contract.dbId ?? '') && contract.client !== selectedClient.name && !localProcessIds.includes(contract.processId)));
+      setFinancialRecords((current) => current.filter((record) => !financialRecordIds.includes(record.id) && record.client !== selectedClient.name && !localProcessIds.includes(record.processId)));
+      setExecutionRecords((current) => current.filter((record) => !executionDbIds.includes(record.dbId ?? '') && !localProcessIds.includes(record.processId)));
+      setServiceTrackings((current) => current.filter((tracking) => tracking.client !== selectedClient.name && !localProcessIds.includes(tracking.processId)));
+      setSelectedProcessId((current) => (current && localProcessIds.includes(current) ? null : current));
+      setSelectedProposalProcessId((current) => (current && localProcessIds.includes(current) ? null : current));
+      setSelectedExecutionProcessId((current) => (current && localProcessIds.includes(current) ? null : current));
+      setSelectedContractProposalId((current) => {
+        const selectedProposal = proposals.find((proposal) => proposal.id === current);
+        return selectedProposal && (selectedProposal.client === selectedClient.name || localProcessIds.includes(selectedProposal.processId)) ? null : current;
+      });
+      setSelectedContractId((current) => {
+        const selectedContract = contracts.find((contract) => contract.id === current);
+        return selectedContract && (selectedContract.client === selectedClient.name || localProcessIds.includes(selectedContract.processId)) ? null : current;
+      });
+
+      await refreshDashboard();
+      window.alert('Cliente excluído com sucesso.');
+    } catch (error: unknown) {
+      window.alert(error instanceof Error ? error.message : 'Não foi possível excluir o cliente. Tente novamente.');
+    }
+  }
+
   async function updateProcessAnalysis(processId: string, analysis: TechnicalAnalysis) {
     const selectedProcess = processes.find((process) => process.id === processId);
     if (selectedProcess?.dbId) {
@@ -3313,6 +3525,7 @@ export function App() {
       remainingValue: formatCurrencyInput(remainingValue),
       validity: proposalForm.validity,
       responsible: proposalForm.responsible,
+      proposalObjective: proposalForm.proposalObjective,
       technicalNotes: proposalForm.technicalNotes,
       observations: proposalForm.observations,
       status: 'Proposta gerada',
@@ -3321,33 +3534,47 @@ export function App() {
     };
 
     if (process.dbId && process.clientId) {
-      const { data: insertedProposal, error: proposalError } = await supabase
+      const proposalPayload = {
+        proposal_number: proposal.id,
+        process_id: process.dbId,
+        client_id: process.clientId,
+        property_id: process.propertyId ?? null,
+        status: mapProposalStatusToDb(proposal.status),
+        client_name: proposal.client,
+        client_phone: proposal.clientPhone || null,
+        property_name: proposal.property || null,
+        city_state: proposalForm.cityState || null,
+        responsible: proposal.responsible || null,
+        proposal_date: formatDateToDb(proposal.createdAt),
+        total_value: totalValue,
+        entry_percentage: proposal.entryPercentage,
+        entry_value: entryValue,
+        remaining_value: remainingValue,
+        payment_methods: proposal.paymentMethods.map(mapPaymentMethodToDb),
+        payment_terms: proposal.paymentTerms || null,
+        deadline: proposal.deadline || null,
+        validity: proposal.validity || null,
+        proposal_objective: proposal.proposalObjective || null,
+        technical_notes: proposal.technicalNotes || null,
+        observations: proposal.observations || null
+      };
+
+      let { data: insertedProposal, error: proposalError } = await supabase
         .from('proposals')
-        .insert({
-          proposal_number: proposal.id,
-          process_id: process.dbId,
-          client_id: process.clientId,
-          property_id: process.propertyId ?? null,
-          status: mapProposalStatusToDb(proposal.status),
-          client_name: proposal.client,
-          client_phone: proposal.clientPhone || null,
-          property_name: proposal.property || null,
-          city_state: proposalForm.cityState || null,
-          responsible: proposal.responsible || null,
-          proposal_date: formatDateToDb(proposal.createdAt),
-          total_value: totalValue,
-          entry_percentage: proposal.entryPercentage,
-          entry_value: entryValue,
-          remaining_value: remainingValue,
-          payment_methods: proposal.paymentMethods.map(mapPaymentMethodToDb),
-          payment_terms: proposal.paymentTerms || null,
-          deadline: proposal.deadline || null,
-          validity: proposal.validity || null,
-          technical_notes: proposal.technicalNotes || null,
-          observations: proposal.observations || null
-        })
+        .insert(proposalPayload)
         .select('*')
         .single();
+
+      if (proposalError && proposalError.message.includes('proposal_objective')) {
+        const { proposal_objective: _proposalObjective, ...legacyProposalPayload } = proposalPayload;
+        const retry = await supabase
+          .from('proposals')
+          .insert(legacyProposalPayload)
+          .select('*')
+          .single();
+        insertedProposal = retry.data;
+        proposalError = retry.error;
+      }
 
       if (!proposalError && insertedProposal) {
         const servicePayload = proposal.services.map((service, index) => ({
@@ -4131,6 +4358,8 @@ export function App() {
             onAttachDocuments={attachClientDocuments}
             onDeleteDocument={deleteDocument}
             onUpdateClient={updateClient}
+            onDeleteClient={deleteClient}
+            canDeleteClients={canDeleteClients}
           />
         ) : activeView === 'Processos' ? (
           <ProcessesView
@@ -4975,7 +5204,9 @@ function ClientsView({
   onSubmit,
   onAttachDocuments,
   onDeleteDocument,
-  onUpdateClient
+  onUpdateClient,
+  onDeleteClient,
+  canDeleteClients
 }: {
   clients: Client[];
   totalClients: number;
@@ -4991,6 +5222,8 @@ function ClientsView({
   onAttachDocuments: (client: Client, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
   onDeleteDocument: (documentId: string) => void;
   onUpdateClient: (clientId: string, updates: ClientFormState) => void | Promise<void>;
+  onDeleteClient: (clientId: string) => void | Promise<void>;
+  canDeleteClients: boolean;
 }) {
   const [selectedDocumentClient, setSelectedDocumentClient] = useState<Client | null>(null);
   const [selectedEditClient, setSelectedEditClient] = useState<Client | null>(null);
@@ -5066,6 +5299,11 @@ function ClientsView({
                   <button className="secondary-light-button" type="button" onClick={() => setSelectedDocumentClient(client)}>
                     <UploadCloud size={17} /> Anexar mais documentos
                   </button>
+                  {canDeleteClients ? (
+                    <button className="icon-action-button danger-icon-button" type="button" onClick={() => onDeleteClient(client.id)} aria-label={`Excluir ${client.name}`}>
+                      <Trash2 size={17} />
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ))}
@@ -6084,6 +6322,17 @@ function ProposalFormModal({
         <label>
           Prazo de execução
           <input value={form.deadline} onChange={(event) => onFieldChange('deadline', event.target.value)} placeholder="Ex: 30 dias após contrato" />
+        </label>
+      </div>
+
+      <div className="form-grid">
+        <label className="wide-field">
+          Objetivo da proposta
+          <textarea
+            value={form.proposalObjective}
+            onChange={(event) => onFieldChange('proposalObjective', event.target.value)}
+            placeholder="Descreva o objetivo principal desta proposta, por exemplo: prestação de serviços de consultoria, licenciamento, regularização ambiental ou acompanhamento técnico."
+          />
         </label>
       </div>
 
