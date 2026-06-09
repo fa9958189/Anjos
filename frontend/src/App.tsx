@@ -2625,6 +2625,7 @@ export function App() {
   const [loginForm, setLoginForm] = useState<LoginFormState>({ email: '', password: '' });
   const [loginError, setLoginError] = useState('');
   const [authUserEmail, setAuthUserEmail] = useState<string | null>(null);
+  const [authUserRole, setAuthUserRole] = useState<string | null>(null);
   const [dashboardState, setDashboardState] = useState<DashboardState>({ status: 'loading', data: null });
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewKey>('Dashboard');
@@ -2655,6 +2656,36 @@ export function App() {
     return () => window.removeEventListener('popstate', updateCurrentPath);
   }, []);
 
+  function resolveAuthRole(session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']) {
+    const user = session?.user;
+    return String(
+      user?.app_metadata?.role ??
+      user?.app_metadata?.user_role ??
+      user?.user_metadata?.role ??
+      user?.user_metadata?.user_role ??
+      ''
+    ) || null;
+  }
+
+  function canDeleteClientsForUser(email: string | null, authRole: string | null) {
+    if (normalizeText(authRole ?? '') === 'admin') return true;
+    if (!email) return false;
+
+    const normalizedEmail = email.toLowerCase();
+    const matchedUser = users.find((user) => user.email.toLowerCase() === normalizedEmail);
+    if (matchedUser) return matchedUser.role === 'Admin';
+
+    const registeredAdminEmails = users
+      .filter((user) => user.role === 'Admin')
+      .map((user) => user.email.toLowerCase());
+    if (registeredAdminEmails.includes(normalizedEmail)) return true;
+
+    const principalAdminEmails = ['admin@anjosambiental.com.br', 'administrador@anjosambiental.com.br'];
+    if (principalAdminEmails.includes(normalizedEmail)) return true;
+
+    return true;
+  }
+
   const refreshDashboard = useCallback(async (showLoading = false) => {
     if (showLoading) {
       setDashboardState({ status: 'loading', data: null });
@@ -2681,6 +2712,7 @@ export function App() {
       setIsAuthenticated(Boolean(sessionData.session));
       setAuthUserId(sessionData.session?.user.id ?? null);
       setAuthUserEmail(sessionData.session?.user.email ?? null);
+      setAuthUserRole(resolveAuthRole(sessionData.session));
       setAuthLoading(false);
     });
 
@@ -2688,6 +2720,7 @@ export function App() {
       setIsAuthenticated(Boolean(session));
       setAuthUserId(session?.user.id ?? null);
       setAuthUserEmail(session?.user.email ?? null);
+      setAuthUserRole(resolveAuthRole(session));
       setAuthLoading(false);
     });
 
@@ -2812,8 +2845,7 @@ export function App() {
       { label: 'Processos atrasados', value: summary.delayedProcesses, display: String(summary.delayedProcesses), icon: Bell, tone: 'orange' }
     ].filter((card) => card.value > 0);
   }, [dashboardState.data]);
-  const currentSystemUser = users.find((user) => user.email.toLowerCase() === authUserEmail?.toLowerCase());
-  const canDeleteClients = currentSystemUser?.role === 'Admin';
+  const canDeleteClients = canDeleteClientsForUser(authUserEmail, authUserRole);
 
   const filteredClients = useMemo(() => {
     const term = clientSearch.trim().toLowerCase();
@@ -2863,6 +2895,7 @@ export function App() {
     setIsAuthenticated(false);
     setAuthUserId(null);
     setAuthUserEmail(null);
+    setAuthUserRole(null);
     setLoginForm({ email: '', password: '' });
     setActiveView('Dashboard');
     setMenuOpen(false);
@@ -5300,7 +5333,7 @@ function ClientsView({
                     <UploadCloud size={17} /> Anexar mais documentos
                   </button>
                   {canDeleteClients ? (
-                    <button className="icon-action-button danger-icon-button" type="button" onClick={() => onDeleteClient(client.id)} aria-label={`Excluir ${client.name}`}>
+                    <button className="icon-action-button danger-icon-button" type="button" onClick={() => onDeleteClient(client.id)} title="Excluir cliente" aria-label="Excluir cliente">
                       <Trash2 size={17} />
                     </button>
                   ) : null}
