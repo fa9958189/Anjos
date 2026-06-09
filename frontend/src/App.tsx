@@ -5158,26 +5158,6 @@ function LandingPage() {
 
     const ctx = gsap.context(() => {
       gsap.set('.landing-bg-one', { opacity: 1, scale: 1, filter: 'brightness(0.92) saturate(1.06)' });
-      gsap.set('.landing-bg-two, .landing-bg-three, .landing-bg-four', { opacity: 0, scale: 1.15, filter: 'brightness(0.92) saturate(1.06)' });
-
-      gsap.timeline({
-        scrollTrigger: {
-          trigger: '.landing-hero',
-          start: 'top top',
-          end: () => window.matchMedia('(max-width: 640px)').matches ? '+=240%' : '+=320%',
-          scrub: 0.65,
-          pin: true,
-          anticipatePin: 1,
-          invalidateOnRefresh: true
-        }
-      })
-        .to('.landing-bg-one', { opacity: 0, scale: 0.94, filter: 'brightness(0.78) saturate(0.98)', ease: 'none', duration: 1 }, 0)
-        .to('.landing-bg-two', { opacity: 1, scale: 1, ease: 'none', duration: 1 }, 0)
-        .to('.landing-bg-two', { opacity: 0, scale: 0.96, filter: 'brightness(0.8) saturate(0.98)', ease: 'none', duration: 1 }, 1)
-        .to('.landing-bg-three', { opacity: 1, scale: 1, ease: 'none', duration: 1 }, 1)
-        .to('.landing-bg-three', { opacity: 0, scale: 0.96, filter: 'brightness(0.8) saturate(0.98)', ease: 'none', duration: 1 }, 2)
-        .to('.landing-bg-four', { opacity: 1, scale: 1, ease: 'none', duration: 1 }, 2)
-        .to('.landing-hero-overlay', { opacity: 0.76, ease: 'none', duration: 3 }, 0);
 
       gsap.from('.landing-hero-content > *', {
         y: 28,
@@ -5234,9 +5214,6 @@ function LandingPage() {
       <section className="landing-hero hero-image-1">
         <div className="landing-hero-background" aria-hidden="true">
           <div className="landing-hero-bg landing-bg-one" />
-          <div className="landing-hero-bg landing-bg-two" />
-          <div className="landing-hero-bg landing-bg-three" />
-          <div className="landing-hero-bg landing-bg-four" />
         </div>
         <div className="landing-hero-overlay" aria-hidden="true" />
         <ForestFallingLeaves />
