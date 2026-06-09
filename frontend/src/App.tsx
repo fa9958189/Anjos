@@ -2755,6 +2755,8 @@ export function App() {
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [selectedProposalProcessId, setSelectedProposalProcessId] = useState<string | null>(null);
+  const [editingProposalId, setEditingProposalId] = useState<string | null>(null);
+  const [isSavingProposal, setIsSavingProposal] = useState(false);
   const [proposalForm, setProposalForm] = useState<ProposalFormState>(emptyProposalForm);
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [selectedContractProposalId, setSelectedContractProposalId] = useState<string | null>(null);
@@ -3724,11 +3726,42 @@ export function App() {
     }
     const currentClient = process?.clientId ? clients.find((client) => client.id === process.clientId) ?? null : null;
     setSelectedProposalProcessId(processId);
+    setEditingProposalId(null);
     setProposalForm(createProposalForm(process, proposals.length, currentClient, baseProposal));
+  }
+
+  function openEditProposal(proposalId: string) {
+    const proposal = proposals.find((item) => item.id === proposalId);
+    if (!proposal || !isProposalActive(proposal)) return;
+    const process = processes.find((item) => item.id === proposal.processId) ?? null;
+    setSelectedProposalProcessId(proposal.processId);
+    setEditingProposalId(proposal.id);
+    setProposalForm({
+      id: proposal.id,
+      date: proposal.createdAt,
+      client: proposal.client,
+      property: proposal.property,
+      responsible: proposal.responsible,
+      phone: proposal.clientPhone,
+      cityState: proposal.cityState,
+      services: proposal.services.length ? proposal.services : [{ description: proposal.service, value: proposal.value }],
+      technicalNotes: proposal.technicalNotes,
+      entryPercentage: proposal.entryPercentage,
+      paymentMethods: proposal.paymentMethods.length ? proposal.paymentMethods : ['Pix'],
+      paymentTerms: proposal.paymentTerms,
+      deadline: proposal.deadline,
+      validity: proposal.validity,
+      proposalObjective: proposal.proposalObjective,
+      observations: proposal.observations
+    });
+    if (!process) {
+      console.warn('[Propostas] Processo vinculado não encontrado para edição', proposal);
+    }
   }
 
   function closeProposalForm() {
     setSelectedProposalProcessId(null);
+    setEditingProposalId(null);
     setProposalForm(emptyProposalForm);
   }
 
@@ -3740,6 +3773,7 @@ export function App() {
     event.preventDefault();
     const process = processes.find((item) => item.id === selectedProposalProcessId);
     if (!process) return;
+    setIsSavingProposal(true);
 
     const totalValue = calculateProposalTotal(proposalForm.services);
     const entryValue = totalValue * (proposalForm.entryPercentage / 100);
@@ -3772,6 +3806,107 @@ export function App() {
       contacts: []
     };
     const previousActiveProposals = proposals.filter((item) => item.processId === process.id && isProposalActive(item));
+
+    const editingProposal = editingProposalId ? proposals.find((item) => item.id === editingProposalId) : null;
+    if (editingProposal) {
+      const updatedProposal: Proposal = {
+        ...editingProposal,
+        ...proposal,
+        dbId: editingProposal.dbId,
+        isActive: editingProposal.isActive,
+        versionNumber: editingProposal.versionNumber,
+        replacedByProposalId: editingProposal.replacedByProposalId,
+        replacedAt: editingProposal.replacedAt,
+        status: editingProposal.status,
+        approvedAt: editingProposal.approvedAt,
+        contacts: editingProposal.contacts
+      };
+
+      if (editingProposal.dbId) {
+        const updatePayload = {
+          proposal_number: updatedProposal.id,
+          client_name: updatedProposal.client,
+          client_phone: updatedProposal.clientPhone || null,
+          property_name: updatedProposal.property || null,
+          city_state: updatedProposal.cityState || null,
+          responsible: updatedProposal.responsible || null,
+          proposal_date: formatDateToDb(updatedProposal.createdAt),
+          total_value: totalValue,
+          entry_percentage: updatedProposal.entryPercentage,
+          entry_value: entryValue,
+          remaining_value: remainingValue,
+          payment_methods: updatedProposal.paymentMethods.map(mapPaymentMethodToDb),
+          payment_terms: updatedProposal.paymentTerms || null,
+          deadline: updatedProposal.deadline || null,
+          validity: updatedProposal.validity || null,
+          proposal_objective: updatedProposal.proposalObjective || null,
+          technical_notes: updatedProposal.technicalNotes || null,
+          observations: updatedProposal.observations || null
+        };
+
+        let { error: updateError } = await supabase
+          .from('proposals')
+          .update(updatePayload)
+          .eq('id', editingProposal.dbId);
+
+        if (updateError && updateError.message.includes('proposal_objective')) {
+          const { proposal_objective: _proposalObjective, ...legacyUpdatePayload } = updatePayload;
+          const retry = await supabase
+            .from('proposals')
+            .update(legacyUpdatePayload)
+            .eq('id', editingProposal.dbId);
+          updateError = retry.error;
+        }
+
+        if (updateError) {
+          setIsSavingProposal(false);
+          await showAppAlert({
+            title: 'Não foi possível atualizar a proposta',
+            message: 'O sistema encontrou um problema ao salvar as alterações da proposta.',
+            technicalDetails: updateError.message,
+            type: 'error',
+            confirmText: 'OK'
+          });
+          return;
+        }
+
+        await supabase.from('proposal_services').delete().eq('proposal_id', editingProposal.dbId);
+        const servicePayload = updatedProposal.services.map((service, index) => ({
+          proposal_id: editingProposal.dbId,
+          description: service.description,
+          value: parseCurrency(service.value),
+          sort_order: index + 1
+        }));
+        if (servicePayload.length > 0) {
+          const { error: serviceError } = await supabase.from('proposal_services').insert(servicePayload);
+          if (serviceError) {
+            setIsSavingProposal(false);
+            await showAppAlert({
+              title: 'Não foi possível atualizar os serviços',
+              message: 'A proposta foi salva, mas houve um problema ao atualizar a lista de serviços.',
+              technicalDetails: serviceError.message,
+              type: 'error',
+              confirmText: 'OK'
+            });
+            return;
+          }
+        }
+      }
+
+      setProposals((current) => current.map((item) => (item.id === editingProposalId ? updatedProposal : item)));
+      setIsSavingProposal(false);
+      closeProposalForm();
+      await showAppAlert({
+        title: 'Proposta atualizada',
+        message: 'As alterações foram salvas com sucesso. A visualização e o PDF da proposta já foram atualizados.',
+        type: 'success',
+        confirmText: 'OK'
+      });
+      if (editingProposal.dbId) {
+        await refreshDashboard();
+      }
+      return;
+    }
 
     if (process.dbId && process.clientId) {
       const proposalPayload = {
@@ -3884,6 +4019,7 @@ export function App() {
     ]);
     openProposalPdf(proposal, true);
     closeProposalForm();
+    setIsSavingProposal(false);
     if (proposal.dbId) {
       await refreshDashboard();
     }
@@ -4749,8 +4885,11 @@ export function App() {
             processes={processes}
             proposals={proposals}
             selectedProcessId={selectedProposalProcessId}
+            editingProposalId={editingProposalId}
+            isSavingProposal={isSavingProposal}
             form={proposalForm}
             onOpenProposal={openProposalForm}
+            onEditProposal={openEditProposal}
             onCloseProposal={closeProposalForm}
             onFieldChange={updateProposalField}
             onSubmit={handleProposalSubmit}
@@ -6486,8 +6625,11 @@ function ProposalsView({
   processes,
   proposals,
   selectedProcessId,
+  editingProposalId,
+  isSavingProposal,
   form,
   onOpenProposal,
+  onEditProposal,
   onCloseProposal,
   onFieldChange,
   onSubmit,
@@ -6496,8 +6638,11 @@ function ProposalsView({
   processes: EnvironmentalProcess[];
   proposals: Proposal[];
   selectedProcessId: string | null;
+  editingProposalId: string | null;
+  isSavingProposal: boolean;
   form: ProposalFormState;
   onOpenProposal: (processId: string, baseProposalId?: string) => void | Promise<void>;
+  onEditProposal: (proposalId: string) => void;
   onCloseProposal: () => void;
   onFieldChange: <K extends keyof ProposalFormState>(field: K, value: ProposalFormState[K]) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
@@ -6607,9 +6752,11 @@ function ProposalsView({
                       <button type="button" className="primary-button dark" onClick={() => openProposalPdf(proposal, true)}>
                         <Download size={17} /> Baixar PDF
                       </button>
-                      <button type="button" className="secondary-light-button" onClick={() => onOpenProposal(process.id, proposal.id)}>
-                        <FilePlus size={17} /> Gerar nova versão
-                      </button>
+                      {isProposalActive(proposal) ? (
+                        <button type="button" className="secondary-light-button" onClick={() => onEditProposal(proposal.id)}>
+                          <Pencil size={17} /> Editar proposta
+                        </button>
+                      ) : null}
                       {proposal.status === 'Proposta gerada' && isProposalActive(proposal) ? (
                         <button type="button" className="primary-button approve-proposal-button" onClick={() => onApproveProposal(proposal.id)}>
                           <ClipboardCheck size={17} /> Aprovar proposta
@@ -6644,7 +6791,15 @@ function ProposalsView({
 
       {selectedProcess ? (
         <div className="modal-backdrop">
-          <ProposalFormModal process={selectedProcess} form={form} onFieldChange={onFieldChange} onSubmit={onSubmit} onClose={onCloseProposal} />
+          <ProposalFormModal
+            process={selectedProcess}
+            form={form}
+            mode={editingProposalId ? 'edit' : 'create'}
+            isSaving={isSavingProposal}
+            onFieldChange={onFieldChange}
+            onSubmit={onSubmit}
+            onClose={onCloseProposal}
+          />
         </div>
       ) : null}
     </section>
@@ -6654,12 +6809,16 @@ function ProposalsView({
 function ProposalFormModal({
   process,
   form,
+  mode = 'create',
+  isSaving = false,
   onFieldChange,
   onSubmit,
   onClose
 }: {
   process: EnvironmentalProcess;
   form: ProposalFormState;
+  mode?: 'create' | 'edit';
+  isSaving?: boolean;
   onFieldChange: <K extends keyof ProposalFormState>(field: K, value: ProposalFormState[K]) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
   onClose: () => void;
@@ -6699,8 +6858,9 @@ function ProposalFormModal({
     <form className="panel modal-card proposal-form-modal commercial-proposal-modal" onSubmit={onSubmit}>
       <div className="form-heading">
         <div>
-          <p className="eyebrow">Geração automática de proposta</p>
-          <h2>{form.id}</h2>
+          <p className="eyebrow">{mode === 'edit' ? 'Editar proposta comercial' : 'Geração automática de proposta'}</p>
+          <h2>{mode === 'edit' ? 'Editar proposta comercial' : form.id}</h2>
+          <span>{mode === 'edit' ? 'Altere os dados que serão exibidos na proposta. O layout do documento será mantido.' : 'Revise os dados comerciais antes de gerar o PDF.'}</span>
         </div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar proposta"><X size={18} /></button>
       </div>
@@ -6828,11 +6988,14 @@ function ProposalFormModal({
         <p className="eyebrow">Preview comercial</p>
         <strong>{form.id} - {form.client}</strong>
         <span>{form.services.length} serviço(s) | Total: {formatCurrency(totalValue)} | Entrada: {formatCurrency(entryValue)}</span>
+        {mode === 'edit' ? <span>Assinatura do cliente: {form.client || 'Nome do cliente'}</span> : null}
       </div>
 
       <div className="form-actions">
         <button type="button" className="secondary-light-button" onClick={onClose}>Cancelar</button>
-        <button type="submit" className="primary-button dark" disabled={!canSave}>Gerar proposta PDF</button>
+        <button type="submit" className="primary-button dark" disabled={!canSave || isSaving}>
+          {isSaving ? 'Salvando...' : mode === 'edit' ? 'Salvar alterações' : 'Gerar proposta PDF'}
+        </button>
       </div>
     </form>
   );
