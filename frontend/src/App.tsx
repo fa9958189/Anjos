@@ -6852,6 +6852,8 @@ function ProposalFormModal({
   const totalValue = calculateProposalTotal(form.services);
   const entryValue = totalValue * (form.entryPercentage / 100);
   const remainingValue = totalValue - entryValue;
+  const [isServiceEditorOpen, setIsServiceEditorOpen] = useState(false);
+  const [serviceDraft, setServiceDraft] = useState(form.service);
   const canSave = Boolean(
     form.id.trim() &&
     form.client.trim() &&
@@ -6880,6 +6882,16 @@ function ProposalFormModal({
     onFieldChange('paymentMethods', exists ? form.paymentMethods.filter((item) => item !== method) : [...form.paymentMethods, method]);
   }
 
+  function openServiceEditor() {
+    setServiceDraft(form.service);
+    setIsServiceEditorOpen(true);
+  }
+
+  function saveServiceText() {
+    onFieldChange('service', serviceDraft);
+    setIsServiceEditorOpen(false);
+  }
+
   return (
     <form className="panel modal-card proposal-form-modal commercial-proposal-modal" onSubmit={onSubmit}>
       <div className="form-heading">
@@ -6894,12 +6906,38 @@ function ProposalFormModal({
       <div className="proposal-process-summary">
         <div><span>Cliente</span><strong>{process.client}</strong></div>
         <div><span>Processo</span><strong>{process.id}</strong></div>
-        <label className="proposal-summary-service-field">
+        <div className="proposal-service-summary-card">
           <span>Serviço</span>
-          <textarea value={form.service} onChange={(event) => onFieldChange('service', event.target.value)} placeholder="Resumo do serviço da proposta" />
-        </label>
+          <p className="proposal-service-summary-text">{form.service || process.service || 'Serviço não informado'}</p>
+          <button className="proposal-service-edit-button" type="button" onClick={openServiceEditor}>
+            <Pencil size={14} /> Editar texto
+          </button>
+        </div>
         <div><span>Propriedade</span><strong>{process.property}</strong></div>
       </div>
+
+      {isServiceEditorOpen ? (
+        <div className="app-dialog-backdrop proposal-service-editor-backdrop" role="presentation">
+          <article className="app-dialog-card proposal-service-editor-modal" role="dialog" aria-modal="true" aria-labelledby="proposal-service-editor-title">
+            <div className="app-dialog-tone" aria-hidden="true" />
+            <div className="app-dialog-content">
+              <p className="eyebrow">Proposta comercial</p>
+              <h3 id="proposal-service-editor-title">Editar texto do serviço</h3>
+              <p>Ajuste o resumo do serviço que aparece no card da proposta.</p>
+              <textarea
+                className="proposal-service-editor-textarea"
+                value={serviceDraft}
+                onChange={(event) => setServiceDraft(event.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="app-dialog-actions">
+              <button type="button" className="secondary-light-button" onClick={() => setIsServiceEditorOpen(false)}>Cancelar</button>
+              <button type="button" className="primary-button dark" onClick={saveServiceText}>Salvar texto</button>
+            </div>
+          </article>
+        </div>
+      ) : null}
 
       <div className="form-section-title">Informações da proposta</div>
       <div className="form-grid">

@@ -2299,20 +2299,73 @@ a { color: inherit; text-decoration: none; }
 }
 .proposal-process-summary span { display: block; color: #627063; font-size: 0.82rem; }
 .proposal-process-summary strong { display: block; margin-top: 7px; color: #14261a; line-height: 1.25; }
-.proposal-summary-service-field textarea {
-  width: 100%;
-  min-height: 52px;
-  resize: vertical;
-  border: 1px solid #dce8d6;
-  border-radius: 8px;
-  background: #ffffff;
+.proposal-service-summary-card {
+  position: relative;
+  display: grid;
+  gap: 8px;
+}
+.proposal-service-summary-text {
+  position: relative;
+  max-height: 58px;
+  overflow: hidden;
+  margin: 0;
   color: #14261a;
-  padding: 8px 10px;
   font-weight: 800;
   line-height: 1.35;
+}
+.proposal-service-summary-text::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 18px;
+  background: linear-gradient(180deg, rgba(251, 253, 248, 0), #fbfdf8);
+  pointer-events: none;
+}
+.proposal-service-edit-button {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #cfe4c5;
+  border-radius: 999px;
+  background: #e8f6df;
+  color: #246526;
+  padding: 7px 10px;
+  font-size: 0.8rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+.proposal-service-edit-button:hover {
+  transform: translateY(-1px);
+  border-color: #9fd18d;
+  background: #dff1d5;
+}
+.proposal-service-editor-backdrop {
+  z-index: 80;
+}
+.proposal-service-editor-modal {
+  width: min(720px, calc(100vw - 28px));
+}
+.proposal-service-editor-modal .app-dialog-content p:not(.eyebrow) {
+  color: #627063;
+  line-height: 1.45;
+}
+.proposal-service-editor-textarea {
+  width: 100%;
+  min-height: 240px;
+  resize: vertical;
+  border: 1px solid #dce8d6;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #14261a;
+  padding: 13px 14px;
+  line-height: 1.55;
   outline: 0;
 }
-.proposal-summary-service-field textarea:focus {
+.proposal-service-editor-textarea:focus {
   border-color: #72b043;
   box-shadow: 0 0 0 3px rgba(114, 176, 67, 0.16);
 }
