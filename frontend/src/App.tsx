@@ -2094,6 +2094,20 @@ function mapProposalStatusToDb(status: ProposalStatus): DbProposal['status'] {
   return statusMap[status];
 }
 
+function getProposalFinancialSnapshot(proposal: Proposal | undefined, totalValue: number) {
+  const entryPercentage = Number.isFinite(proposal?.entryPercentage) ? Number(proposal?.entryPercentage) : 50;
+  const hasEntryValue = Boolean(proposal?.entryValue?.trim());
+  const hasRemainingValue = Boolean(proposal?.remainingValue?.trim());
+  const entryAmount = hasEntryValue ? parseCurrency(proposal?.entryValue ?? '') : totalValue * (entryPercentage / 100);
+  const remainingAmount = hasRemainingValue ? parseCurrency(proposal?.remainingValue ?? '') : Math.max(totalValue - entryAmount, 0);
+
+  return {
+    entryPercentage,
+    entryAmount,
+    remainingAmount: Math.max(remainingAmount, 0)
+  };
+}
+
 function mapDbProposalToProposal(proposal: DbProposal): Proposal {
   const services = [...(proposal.proposal_services ?? [])]
     .sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0))
@@ -2162,6 +2176,10 @@ function mapDbContractToContract(contract: DbContract): ContractRecord {
   const totalValue = Number(contract.total_value ?? 0);
   const entryValue = Number(contract.entry_value ?? totalValue / 2);
   const remainingValue = Number(contract.remaining_value ?? Math.max(totalValue - entryValue, 0));
+  const entryPercentage = Number(contract.entry_percentage ?? (totalValue > 0 ? (entryValue / totalValue) * 100 : 50));
+  const paymentClause = entryPercentage >= 100 || remainingValue <= 0
+    ? `Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${formatCurrency(totalValue)}, em pagamento à vista no ato da assinatura deste contrato, salvo condição diversa expressamente ajustada entre as partes.`
+    : `Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${formatCurrency(totalValue)}, sendo ${entryPercentage}% na assinatura deste contrato (${formatCurrency(entryValue)}) e o saldo de ${formatCurrency(remainingValue)} conforme as condições comerciais ajustadas entre as partes.`;
 
   return {
     dbId: contract.id,
@@ -2196,7 +2214,7 @@ function mapDbContractToContract(contract: DbContract): ContractRecord {
     objectClause: `O presente contrato tem por objeto a prestação de serviços técnicos especializados de ${contract.service_description}, a serem executados pela CONTRATADA em área indicada pela CONTRATANTE, referente à propriedade ${contract.property_name ?? 'não informada'}, vinculada ao processo ${contract.processes?.process_number ?? contract.process_id} e à proposta comercial ${contract.proposals?.proposal_number ?? contract.proposal_id}.`,
     contractedObligations: 'São obrigações da CONTRATADA executar os serviços contratados com observância das normas técnicas aplicáveis, disponibilizar equipe técnica, ferramentas e materiais necessários à execução dos serviços, entregar os serviços dentro dos padrões técnicos exigidos e informar à CONTRATANTE qualquer fato que possa comprometer o andamento dos trabalhos.',
     contractorObligations: 'São obrigações da CONTRATANTE disponibilizar acesso à área objeto dos serviços, fornecer informações e documentos necessários à execução dos trabalhos, prestar esclarecimentos quando solicitado e efetuar os pagamentos nos prazos estabelecidos neste contrato.',
-    paymentClause: `Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${formatCurrency(totalValue)}, sendo 50% na assinatura deste contrato (${formatCurrency(entryValue)}) e 50% na conclusão dos serviços (${formatCurrency(remainingValue)}), salvo condição diversa expressamente ajustada entre as partes.`,
+    paymentClause,
     deadlineClause: `O prazo para execução dos serviços será de ${contract.execution_deadline ?? 'acordo entre as partes'}, ou conforme disponibilidade de acesso à área, entrega integral dos documentos necessários e condições técnicas adequadas à realização dos trabalhos.`,
     terminationClause: 'O presente contrato poderá ser rescindido por qualquer das partes em caso de descumprimento de quaisquer cláusulas aqui estabelecidas, mediante comunicação formal, preservando-se os valores proporcionais aos serviços já executados.',
     jurisdictionClause: 'Fica eleito o foro da comarca de Goiânia/GO para dirimir quaisquer controvérsias oriundas deste contrato, com renúncia expressa a qualquer outro, por mais privilegiado que seja.',
@@ -2209,8 +2227,7 @@ function mapDbContractToContract(contract: DbContract): ContractRecord {
 
 function mapContractToDb(contract: ContractRecord, proposal?: Proposal) {
   const totalValue = parseCurrency(contract.value);
-  const entryPercentage = proposal?.entryPercentage ?? 50;
-  const entryValue = totalValue * (entryPercentage / 100);
+  const financialSnapshot = getProposalFinancialSnapshot(proposal, totalValue);
 
   return {
     contract_number: contract.id,
@@ -2228,9 +2245,9 @@ function mapContractToDb(contract: ContractRecord, proposal?: Proposal) {
     property_name: contract.property || null,
     service_description: contract.service,
     total_value: totalValue,
-    entry_percentage: entryPercentage,
-    entry_value: entryValue,
-    remaining_value: Math.max(totalValue - entryValue, 0),
+    entry_percentage: financialSnapshot.entryPercentage,
+    entry_value: financialSnapshot.entryAmount,
+    remaining_value: financialSnapshot.remainingAmount,
     payment_terms: contract.paymentTerms || contract.paymentClause || null,
     execution_deadline: contract.deadline || null,
     contract_date: formatDateToDb(contract.contractDate),
@@ -4159,8 +4176,7 @@ export function App() {
 
         if (!contract.dbId) {
           const totalValue = parseCurrency(contractWithRelations.value);
-          const entryPercentage = linkedProposal?.entryPercentage ?? 50;
-          const entryValue = totalValue * (entryPercentage / 100);
+          const financialSnapshot = getProposalFinancialSnapshot(linkedProposal, totalValue);
 
           const financialPayload = {
             contract_id: dbContract.id,
@@ -4171,9 +4187,9 @@ export function App() {
             client_name: contractWithRelations.client,
             service_description: contractWithRelations.service,
             total_value: totalValue,
-            entry_percentage: entryPercentage,
-            entry_value: entryValue,
-            remaining_value: Math.max(totalValue - entryValue, 0),
+            entry_percentage: financialSnapshot.entryPercentage,
+            entry_value: financialSnapshot.entryAmount,
+            remaining_value: financialSnapshot.remainingAmount,
             expected_payment_date: formatDateToDb(contractWithRelations.contractDate)
           };
 
@@ -4616,8 +4632,20 @@ export function App() {
       process_id: updates.processDbId ?? relatedProcess?.dbId ?? relatedContract?.processDbId,
       client_id: updates.clientDbId ?? relatedProcess?.clientId ?? relatedContract?.clientDbId
     };
+    const totalValue = updates.amount ?? (relatedContract ? parseCurrency(relatedContract.value) : 0);
+    const proposalFinancial = getProposalFinancialSnapshot(relatedProposal, totalValue);
+    const entryPercentage = updates.entryPercentage ?? proposalFinancial.entryPercentage;
+    const entryAmount = updates.entryAmount ?? proposalFinancial.entryAmount;
+    const remainingAmount = updates.remainingAmount ?? proposalFinancial.remainingAmount;
     const financialPayload = {
       status: updatedStatus === 'Liberado para execução' ? 'entrada_confirmada' : mapFinancialStatusToDb(updatedStatus),
+      client_name: updates.client ?? relatedContract?.client ?? '',
+      service_description: updates.service ?? relatedContract?.service ?? '',
+      total_value: totalValue,
+      entry_percentage: entryPercentage,
+      entry_value: entryAmount,
+      remaining_value: remainingAmount,
+      expected_payment_date: formatDateToDb(updates.dueDate ?? ''),
       received_amount: updates.receivedAmount ?? 0,
       payment_date: paymentDate,
       payment_method: mapFinancialPaymentMethodToDb(updates.paymentMethod),
@@ -4663,13 +4691,6 @@ export function App() {
       proposal_id: relationIds.proposal_id ?? null,
       process_id: relationIds.process_id ?? null,
       client_id: relationIds.client_id ?? null,
-      client_name: updates.client ?? '',
-      service_description: updates.service ?? '',
-      total_value: updates.amount ?? 0,
-      entry_percentage: updates.entryPercentage ?? 0,
-      entry_value: updates.entryAmount ?? updates.receivedAmount ?? 0,
-      remaining_value: updates.remainingAmount ?? 0,
-      expected_payment_date: formatDateToDb(updates.dueDate ?? '')
     };
 
     let savedRecord: DbFinancialRecord | null = null;
@@ -8627,12 +8648,38 @@ function FinancialView({
 }) {
   const [selectedRecord, setSelectedRecord] = useState<FinancialRecord | null>(null);
   const contractRecords = contracts.filter((contract) => contract.status !== 'Cancelado').map((contract) => {
-    const existing = records.find((record) => record.proposalId === contract.proposalId);
-    const proposal = proposals.find((item) => item.id === contract.proposalId);
-    const entryPercentage = proposal?.entryPercentage ?? 50;
-    const entryAmount = parseCurrency(contract.value) * (entryPercentage / 100);
-    const remainingAmount = parseCurrency(contract.value) - entryAmount;
-    return existing ?? {
+    const existing = records.find((record) =>
+      record.contractDbId === contract.dbId ||
+      record.contractId === contract.id ||
+      record.proposalDbId === contract.proposalDbId ||
+      record.proposalId === contract.proposalId
+    );
+    const proposal = proposals.find((item) => item.id === contract.proposalId || item.dbId === contract.proposalDbId);
+    const totalValue = parseCurrency(contract.value);
+    const fallbackEntryPercentage = existing?.entryPercentage ?? 50;
+    const fallbackEntryAmount = existing?.entryAmount ?? totalValue * (fallbackEntryPercentage / 100);
+    const fallbackRemainingAmount = existing?.remainingAmount ?? Math.max(totalValue - fallbackEntryAmount, 0);
+    const proposalFinancial = proposal
+      ? getProposalFinancialSnapshot(proposal, totalValue)
+      : {
+          entryPercentage: fallbackEntryPercentage,
+          entryAmount: fallbackEntryAmount,
+          remainingAmount: fallbackRemainingAmount
+        };
+    const normalizedRecord = {
+      ...(existing ?? {
+        id: 'REC-' + contract.id.replace('CONT', ''),
+        dueDate: 'A definir',
+        paymentStatus: 'Aberto' as FinancialRecord['paymentStatus'],
+        financialStatus: 'Aguardando entrada' as FinancialRecord['financialStatus'],
+        receivedAmount: 0,
+        paymentMethod: '',
+        paidAt: '',
+        releasedAt: '',
+        invoiceNumber: '',
+        invoiceStatus: 'Não emitida' as FinancialRecord['invoiceStatus'],
+        notes: ''
+      }),
       id: 'REC-' + contract.id.replace('CONT', ''),
       contractDbId: contract.dbId,
       proposalDbId: contract.proposalDbId,
@@ -8643,21 +8690,12 @@ function FinancialView({
       processId: contract.processId,
       client: contract.client,
       service: contract.service,
-      amount: parseCurrency(contract.value),
-      entryPercentage,
-      entryAmount,
-      remainingAmount,
-      dueDate: 'A definir',
-      paymentStatus: 'Aberto' as FinancialRecord['paymentStatus'],
-      financialStatus: 'Aguardando entrada' as FinancialRecord['financialStatus'],
-      receivedAmount: 0,
-      paymentMethod: '',
-      paidAt: '',
-      releasedAt: '',
-      invoiceNumber: '',
-      invoiceStatus: 'Não emitida' as FinancialRecord['invoiceStatus'],
-      notes: ''
+      amount: totalValue,
+      entryPercentage: proposalFinancial.entryPercentage,
+      entryAmount: proposalFinancial.entryAmount,
+      remainingAmount: proposalFinancial.remainingAmount
     };
+    return existing ? { ...normalizedRecord, id: existing.id } : normalizedRecord;
   });
   const awaitingEntry = contractRecords.filter((record) => record.financialStatus === 'Aguardando entrada');
   const releasedRecords = contractRecords.filter((record) => Boolean(record.releasedAt));
@@ -8672,15 +8710,15 @@ function FinancialView({
         <div>
           <p className="eyebrow">Etapa 05 - Financeiro</p>
           <h1>Financeiro</h1>
-          <p>Confirme a entrada inicial dos contratos criados pelo jurídico e libere os processos para execução somente após a validação financeira.</p>
+          <p>Confirme o pagamento definido nos contratos criados pelo jurídico e libere os processos para execução somente após a validação financeira.</p>
         </div>
       </div>
 
       <div className="module-stats-grid">
-        <article className="mini-stat"><span>Aguardando entrada</span><strong>{awaitingEntry.length}</strong></article>
+        <article className="mini-stat"><span>Aguardando confirmação</span><strong>{awaitingEntry.length}</strong></article>
         <article className="mini-stat"><span>Liberados para execução</span><strong>{releasedRecords.length}</strong></article>
-        <article className="mini-stat"><span>Entradas previstas</span><strong>{formatCurrency(expectedEntries)}</strong></article>
-        <article className="mini-stat"><span>Entradas confirmadas</span><strong>{formatCurrency(confirmedEntries)}</strong></article>
+        <article className="mini-stat"><span>Pagamentos previstos</span><strong>{formatCurrency(expectedEntries)}</strong></article>
+        <article className="mini-stat"><span>Pagamentos confirmados</span><strong>{formatCurrency(confirmedEntries)}</strong></article>
       </div>
 
       <article className="panel">
@@ -8691,7 +8729,10 @@ function FinancialView({
           </div>
         </div>
         <div className="finance-list finance-list-grid">
-          {contractRecords.map((record) => (
+          {contractRecords.map((record) => {
+            const isFullPayment = record.entryPercentage >= 100 || record.remainingAmount <= 0;
+            const expectedPaymentLabel = isFullPayment ? 'Pagamento 100%' : `Entrada ${record.entryPercentage}%`;
+            return (
             <div className={`finance-card finance-state-${getFinancialStatusClass(record.financialStatus)}`} key={record.id}>
               <div className="proposal-card-header">
                 <div>
@@ -8705,13 +8746,13 @@ function FinancialView({
               <p>{record.service}</p>
               <div className="finance-card-grid">
                 <span>Valor total <strong>{formatCurrency(record.amount)}</strong></span>
-                <span>Entrada {record.entryPercentage}% <strong>{formatCurrency(record.entryAmount)}</strong></span>
+                <span>{expectedPaymentLabel} <strong>{formatCurrency(record.entryAmount)}</strong></span>
                 <span>Restante <strong>{formatCurrency(record.remainingAmount)}</strong></span>
                 <span>Data do contrato <strong>{contracts.find((contract) => contract.id === record.contractId)?.contractDate ?? 'A definir'}</strong></span>
               </div>
               {record.financialStatus === 'Aguardando entrada' ? (
                 <button className="primary-button dark" type="button" onClick={() => setSelectedRecord(record)}>
-                  <BadgeDollarSign size={17} /> Confirmar pagamento inicial
+                  <BadgeDollarSign size={17} /> {isFullPayment ? 'Confirmar pagamento' : 'Confirmar pagamento inicial'}
                 </button>
               ) : (
                 <div className="finance-release-summary">
@@ -8721,7 +8762,7 @@ function FinancialView({
                 </div>
               )}
             </div>
-          ))}
+          );})}
           {contractRecords.length === 0 ? <div className="empty-state">Quando o jurídico criar um contrato, a validação financeira aparecerá aqui.</div> : null}
         </div>
       </article>
@@ -8756,6 +8797,9 @@ function PaymentConfirmationModal({
   onClose: () => void;
   onConfirm: (updates: Partial<FinancialRecord>) => Promise<boolean>;
 }) {
+  const isFullPayment = record.entryPercentage >= 100 || record.remainingAmount <= 0;
+  const expectedPaymentLabel = isFullPayment ? 'Pagamento esperado' : 'Entrada esperada';
+  const percentageLabel = isFullPayment ? 'Pagamento de 100%' : `Entrada de ${record.entryPercentage}%`;
   const [form, setForm] = useState({
     receivedAmount: record.entryAmount ? formatCurrencyInput(record.entryAmount) : '',
     paymentDate: new Date().toLocaleDateString('pt-BR'),
@@ -8770,15 +8814,17 @@ function PaymentConfirmationModal({
     if (!form.confirmed) return;
     const releaseDate = new Date().toLocaleDateString('pt-BR');
     setIsSubmitting(true);
+    const receivedAmount = parseCurrency(form.receivedAmount);
+    const paidInFull = isFullPayment || receivedAmount >= record.amount;
     const confirmed = await onConfirm({
       ...record,
       financialStatus: 'Liberado para execução',
-      paymentStatus: 'Parcial',
-      receivedAmount: parseCurrency(form.receivedAmount),
+      paymentStatus: paidInFull ? 'Pago' : 'Parcial',
+      receivedAmount,
       paidAt: form.paymentDate,
       paymentMethod: form.paymentMethod,
       releasedAt: releaseDate,
-      notes: form.notes || 'Pagamento inicial confirmado e serviço liberado para execução.'
+      notes: form.notes || (isFullPayment ? 'Pagamento total confirmado e serviço liberado para execução.' : 'Pagamento inicial confirmado e serviço liberado para execução.')
     });
     if (!confirmed) setIsSubmitting(false);
   }
@@ -8788,7 +8834,7 @@ function PaymentConfirmationModal({
       <div className="form-heading">
         <div>
           <p className="eyebrow">Confirmação financeira</p>
-          <h2>Pagamento inicial</h2>
+          <h2>{isFullPayment ? 'Pagamento total' : 'Pagamento inicial'}</h2>
         </div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar confirmação"><X size={18} /></button>
       </div>
@@ -8796,8 +8842,11 @@ function PaymentConfirmationModal({
       <div className="proposal-process-summary">
         <div><span>Cliente</span><strong>{record.client}</strong></div>
         <div><span>Contrato</span><strong>{record.contractId}</strong></div>
+        <div><span>Serviço</span><strong>{record.service}</strong></div>
         <div><span>Valor total</span><strong>{formatCurrency(record.amount)}</strong></div>
-        <div><span>Entrada esperada</span><strong>{formatCurrency(record.entryAmount)}</strong></div>
+        <div><span>Percentual definido</span><strong>{percentageLabel}</strong></div>
+        <div><span>{expectedPaymentLabel}</span><strong>{formatCurrency(record.entryAmount)}</strong></div>
+        <div><span>Valor restante</span><strong>{formatCurrency(record.remainingAmount)}</strong></div>
       </div>
 
       <div className="form-grid">
@@ -8817,7 +8866,7 @@ function PaymentConfirmationModal({
 
       <label className="confirmation-check">
         <input type="checkbox" checked={form.confirmed} onChange={(event) => setForm((current) => ({ ...current, confirmed: event.target.checked }))} />
-        <span>Confirmo que o pagamento inicial foi identificado e o serviço pode ser liberado para execução.</span>
+        <span>Confirmo que o {isFullPayment ? 'pagamento' : 'pagamento inicial'} foi identificado e o serviço pode ser liberado para execução.</span>
       </label>
 
       <div className="analysis-footer">
