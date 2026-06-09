@@ -81,6 +81,18 @@ type DashboardState = {
   error?: string;
 };
 
+type AppDialogType = 'info' | 'success' | 'warning' | 'danger' | 'error' | 'confirm';
+
+type AppDialogState = {
+  title: string;
+  message: string;
+  type: AppDialogType;
+  technicalDetails?: string;
+  confirmText?: string;
+  cancelText?: string;
+  mode: 'alert' | 'confirm';
+};
+
 type ViewKey = 'Dashboard' | 'Usuários' | 'Clientes' | 'Processos' | 'Propostas' | 'Acompanhamento' | 'Execução' | 'Financeiro' | 'Contratos';
 
 type SystemUser = {
@@ -2390,6 +2402,19 @@ function mapInvoiceStatusFromDb(status: DbFinancialRecord['invoice_status']): Fi
   return status ? statusMap[status] : 'Não emitida';
 }
 
+function mapInvoiceStatusToDb(status?: FinancialRecord['invoiceStatus']) {
+  const statusMap: Record<FinancialRecord['invoiceStatus'], NonNullable<DbFinancialRecord['invoice_status']>> = {
+    'Não emitida': 'nao_emitida',
+    Emitida: 'emitida',
+    Cancelada: 'cancelada'
+  };
+  return status ? statusMap[status] : 'nao_emitida';
+}
+
+function isDuplicateKeyError(error?: { code?: string; message?: string } | null) {
+  return error?.code === '23505' || Boolean(error?.message?.toLowerCase().includes('duplicate key'));
+}
+
 function isUuid(value: string | undefined) {
   return Boolean(value?.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i));
 }
@@ -2626,6 +2651,8 @@ export function App() {
   const [loginError, setLoginError] = useState('');
   const [authUserEmail, setAuthUserEmail] = useState<string | null>(null);
   const [authUserRole, setAuthUserRole] = useState<string | null>(null);
+  const [appDialog, setAppDialog] = useState<AppDialogState | null>(null);
+  const appDialogResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const [dashboardState, setDashboardState] = useState<DashboardState>({ status: 'loading', data: null });
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewKey>('Dashboard');
@@ -2684,6 +2711,28 @@ export function App() {
     if (principalAdminEmails.includes(normalizedEmail)) return true;
 
     return true;
+  }
+
+  function resolveAppDialog(confirmed: boolean) {
+    appDialogResolverRef.current?.(confirmed);
+    appDialogResolverRef.current = null;
+    setAppDialog(null);
+  }
+
+  function showAppConfirm(dialog: Omit<AppDialogState, 'mode'>) {
+    appDialogResolverRef.current?.(false);
+    return new Promise<boolean>((resolve) => {
+      appDialogResolverRef.current = resolve;
+      setAppDialog({ ...dialog, mode: 'confirm' });
+    });
+  }
+
+  async function showAppAlert(dialog: Omit<AppDialogState, 'mode' | 'cancelText'>) {
+    appDialogResolverRef.current?.(false);
+    await new Promise<boolean>((resolve) => {
+      appDialogResolverRef.current = resolve;
+      setAppDialog({ ...dialog, mode: 'alert' });
+    });
   }
 
   const refreshDashboard = useCallback(async (showLoading = false) => {
@@ -3369,9 +3418,13 @@ export function App() {
     const selectedClient = clients.find((client) => client.id === clientId);
     if (!selectedClient) return;
 
-    const shouldDelete = window.confirm(
-      'Tem certeza que deseja excluir este cliente? Essa ação vai apagar também propriedades, processos, documentos, propostas, contratos, financeiro e execução vinculados a este cliente. Essa ação não poderá ser desfeita.'
-    );
+    const shouldDelete = await showAppConfirm({
+      title: 'Excluir cliente',
+      message: 'Tem certeza que deseja excluir este cliente? Essa ação vai apagar também propriedades, processos, documentos, propostas, contratos, financeiro e execução vinculados a este cliente. Essa ação não poderá ser desfeita.',
+      type: 'danger',
+      confirmText: 'Excluir cliente',
+      cancelText: 'Cancelar'
+    });
     if (!shouldDelete) return;
 
     const clientDbId = isUuid(selectedClient.id) ? selectedClient.id : undefined;
@@ -3475,9 +3528,18 @@ export function App() {
       });
 
       await refreshDashboard();
-      window.alert('Cliente excluído com sucesso.');
+      await showAppAlert({
+        title: 'Cliente excluído',
+        message: 'Cliente excluído com sucesso.',
+        type: 'success'
+      });
     } catch (error: unknown) {
-      window.alert(error instanceof Error ? error.message : 'Não foi possível excluir o cliente. Tente novamente.');
+      await showAppAlert({
+        title: 'Não foi possível excluir o cliente',
+        message: 'Encontramos um problema ao excluir este cliente. Verifique os vínculos no Supabase e tente novamente.',
+        technicalDetails: error instanceof Error ? error.message : 'Erro desconhecido.',
+        type: 'error'
+      });
     }
   }
 
@@ -4197,43 +4259,94 @@ export function App() {
       payment_method: mapFinancialPaymentMethodToDb(updates.paymentMethod),
       payment_notes: updates.notes || null,
       released_for_execution: true,
-      released_at: new Date().toISOString()
+      released_at: new Date().toISOString(),
+      invoice_number: updates.invoiceNumber || null,
+      invoice_status: mapInvoiceStatusToDb(updates.invoiceStatus)
     };
-    const hasPersistedFinancialRecord = isUuid(recordId);
+    let persistedFinancialRecordId = isUuid(recordId) ? recordId : undefined;
+
+    if (!persistedFinancialRecordId && relationIds.contract_id) {
+      const { data: existingByContract, error: existingByContractError } = await supabase
+        .from('financial_records')
+        .select('id')
+        .eq('contract_id', relationIds.contract_id)
+        .maybeSingle();
+
+      if (existingByContractError) {
+        await showAppAlert({
+          title: 'Não foi possível confirmar o pagamento',
+          message: 'Encontramos um problema ao salvar a confirmação financeira. Verifique se este contrato já possui pagamento registrado e tente novamente.',
+          technicalDetails: existingByContractError.message,
+          type: 'error'
+        });
+        return false;
+      }
+
+      persistedFinancialRecordId = existingByContract?.id;
+    }
 
     console.info('[Financeiro] Confirmar pagamento - dados enviados', {
       table: 'financial_records',
-      operation: hasPersistedFinancialRecord ? 'update' : 'insert',
+      operation: persistedFinancialRecordId ? 'update' : 'insert',
       recordId,
       payload: financialPayload,
       relationIds
     });
 
-    const { data: savedRecord, error } = hasPersistedFinancialRecord
+    const insertPayload = {
+      ...financialPayload,
+      contract_id: relationIds.contract_id ?? null,
+      proposal_id: relationIds.proposal_id ?? null,
+      process_id: relationIds.process_id ?? null,
+      client_id: relationIds.client_id ?? null,
+      client_name: updates.client ?? '',
+      service_description: updates.service ?? '',
+      total_value: updates.amount ?? 0,
+      entry_percentage: updates.entryPercentage ?? 0,
+      entry_value: updates.entryAmount ?? updates.receivedAmount ?? 0,
+      remaining_value: updates.remainingAmount ?? 0,
+      expected_payment_date: formatDateToDb(updates.dueDate ?? '')
+    };
+
+    let savedRecord: DbFinancialRecord | null = null;
+    let error: { code?: string; message: string } | null = null;
+
+    const saveResult = persistedFinancialRecordId
       ? await supabase
         .from('financial_records')
         .update(financialPayload)
-        .eq('id', recordId)
+        .eq('id', persistedFinancialRecordId)
         .select('*')
         .single()
       : await supabase
         .from('financial_records')
-        .insert({
-          ...financialPayload,
-          contract_id: relationIds.contract_id ?? null,
-          proposal_id: relationIds.proposal_id ?? null,
-          process_id: relationIds.process_id ?? null,
-          client_id: relationIds.client_id ?? null,
-          client_name: updates.client ?? '',
-          service_description: updates.service ?? '',
-          total_value: updates.amount ?? 0,
-          entry_percentage: updates.entryPercentage ?? 0,
-          entry_value: updates.entryAmount ?? updates.receivedAmount ?? 0,
-          remaining_value: updates.remainingAmount ?? 0,
-          expected_payment_date: formatDateToDb(updates.dueDate ?? '')
-        })
+        .insert(insertPayload)
         .select('*')
         .single();
+
+    savedRecord = saveResult.data as DbFinancialRecord | null;
+    error = saveResult.error;
+
+    if (isDuplicateKeyError(error) && relationIds.contract_id) {
+      const { data: existingAfterDuplicate, error: lookupError } = await supabase
+        .from('financial_records')
+        .select('id')
+        .eq('contract_id', relationIds.contract_id)
+        .maybeSingle();
+
+      if (!lookupError && existingAfterDuplicate?.id) {
+        const retry = await supabase
+          .from('financial_records')
+          .update(financialPayload)
+          .eq('id', existingAfterDuplicate.id)
+          .select('*')
+          .single();
+
+        savedRecord = retry.data as DbFinancialRecord | null;
+        error = retry.error;
+        persistedFinancialRecordId = existingAfterDuplicate.id;
+      }
+    }
 
     console.info('[Financeiro] Confirmar pagamento - resposta Supabase', {
       table: 'financial_records',
@@ -4245,13 +4358,18 @@ export function App() {
       console.error('[Financeiro] Erro ao confirmar pagamento no Supabase', {
         table: 'financial_records',
         recordId,
-        operation: hasPersistedFinancialRecord ? 'update' : 'insert',
+        operation: persistedFinancialRecordId ? 'update' : 'insert',
         payload: financialPayload,
         relationIds,
         error
       });
-      window.alert(`Não foi possível confirmar o pagamento no Supabase.\n\n${error.message}`);
-      return;
+      await showAppAlert({
+        title: 'Não foi possível confirmar o pagamento',
+        message: 'Encontramos um problema ao salvar a confirmação financeira. Verifique se este contrato já possui pagamento registrado e tente novamente.',
+        technicalDetails: error.message,
+        type: 'error'
+      });
+      return false;
     }
 
     const nextRecord = savedRecord
@@ -4265,7 +4383,7 @@ export function App() {
           processDbId: relationIds.process_id,
           clientDbId: relationIds.client_id
         }
-      : ({ ...(updates as FinancialRecord), id: recordId });
+      : ({ ...(updates as FinancialRecord), id: persistedFinancialRecordId ?? recordId });
 
     const processDbId = isUuid(nextRecord.processDbId) ? nextRecord.processDbId : relatedProcess?.dbId;
 
@@ -4291,11 +4409,31 @@ export function App() {
     }
 
     setFinancialRecords((current) => {
-      const exists = current.some((record) => record.id === recordId);
-      if (exists) return current.map((record) => record.id === recordId ? nextRecord : record);
+      const exists = current.some((record) =>
+        record.id === recordId ||
+        record.id === nextRecord.id ||
+        Boolean(nextRecord.contractDbId && record.contractDbId === nextRecord.contractDbId) ||
+        Boolean(nextRecord.contractId && record.contractId === nextRecord.contractId)
+      );
+      if (exists) {
+        return current.map((record) =>
+          record.id === recordId ||
+          record.id === nextRecord.id ||
+          Boolean(nextRecord.contractDbId && record.contractDbId === nextRecord.contractDbId) ||
+          Boolean(nextRecord.contractId && record.contractId === nextRecord.contractId)
+            ? nextRecord
+            : record
+        );
+      }
       return [nextRecord, ...current];
     });
     await refreshDashboard();
+    await showAppAlert({
+      title: 'Pagamento confirmado',
+      message: 'O pagamento foi registrado com sucesso e o serviço foi liberado para execução.',
+      type: 'success'
+    });
+    return true;
   }
 
   if (currentPath !== '/login') {
@@ -4468,6 +4606,33 @@ export function App() {
         ) : null}
       </main>
       <WhatsAppFloatingButton />
+      {appDialog ? <AppDialog dialog={appDialog} onResolve={resolveAppDialog} /> : null}
+    </div>
+  );
+}
+
+function AppDialog({ dialog, onResolve }: { dialog: AppDialogState; onResolve: (confirmed: boolean) => void }) {
+  return (
+    <div className="app-dialog-backdrop" role="presentation">
+      <article className={`app-dialog-card app-dialog-${dialog.type}`} role="dialog" aria-modal="true" aria-labelledby="app-dialog-title">
+        <div className="app-dialog-tone" aria-hidden="true" />
+        <div className="app-dialog-content">
+          <p className="eyebrow">{dialog.mode === 'confirm' ? 'Confirmação' : 'Mensagem do sistema'}</p>
+          <h2 id="app-dialog-title">{dialog.title}</h2>
+          <p>{dialog.message}</p>
+          {dialog.technicalDetails ? <pre className="app-dialog-details">{dialog.technicalDetails}</pre> : null}
+        </div>
+        <div className="app-dialog-actions">
+          {dialog.mode === 'confirm' ? (
+            <button type="button" className="secondary-light-button" onClick={() => onResolve(false)}>
+              {dialog.cancelText ?? 'Cancelar'}
+            </button>
+          ) : null}
+          <button type="button" className={dialog.type === 'danger' || dialog.type === 'error' ? 'primary-button danger-dialog-button' : 'primary-button dark'} onClick={() => onResolve(true)} autoFocus>
+            {dialog.confirmText ?? 'OK'}
+          </button>
+        </div>
+      </article>
     </div>
   );
 }
@@ -7926,7 +8091,7 @@ function FinancialView({
   records: FinancialRecord[];
   contracts: ContractRecord[];
   proposals: Proposal[];
-  onUpdateRecord: (recordId: string, updates: Partial<FinancialRecord>) => Promise<void>;
+  onUpdateRecord: (recordId: string, updates: Partial<FinancialRecord>) => Promise<boolean>;
 }) {
   const [selectedRecord, setSelectedRecord] = useState<FinancialRecord | null>(null);
   const contractRecords = contracts.filter((contract) => contract.status !== 'Cancelado').map((contract) => {
@@ -8035,8 +8200,9 @@ function FinancialView({
             record={selectedRecord}
             onClose={() => setSelectedRecord(null)}
             onConfirm={async (updates) => {
-              await onUpdateRecord(selectedRecord.id, updates);
-              setSelectedRecord(null);
+              const confirmed = await onUpdateRecord(selectedRecord.id, updates);
+              if (confirmed) setSelectedRecord(null);
+              return confirmed;
             }}
           />
         </div>
@@ -8056,7 +8222,7 @@ function PaymentConfirmationModal({
 }: {
   record: FinancialRecord;
   onClose: () => void;
-  onConfirm: (updates: Partial<FinancialRecord>) => Promise<void>;
+  onConfirm: (updates: Partial<FinancialRecord>) => Promise<boolean>;
 }) {
   const [form, setForm] = useState({
     receivedAmount: record.entryAmount ? formatCurrencyInput(record.entryAmount) : '',
@@ -8072,7 +8238,7 @@ function PaymentConfirmationModal({
     if (!form.confirmed) return;
     const releaseDate = new Date().toLocaleDateString('pt-BR');
     setIsSubmitting(true);
-    await onConfirm({
+    const confirmed = await onConfirm({
       ...record,
       financialStatus: 'Liberado para execução',
       paymentStatus: 'Parcial',
@@ -8082,7 +8248,7 @@ function PaymentConfirmationModal({
       releasedAt: releaseDate,
       notes: form.notes || 'Pagamento inicial confirmado e serviço liberado para execução.'
     });
-    setIsSubmitting(false);
+    if (!confirmed) setIsSubmitting(false);
   }
 
   return (
