@@ -1374,6 +1374,35 @@ const formatDateToDb = (value: string) => {
 const normalizeText = (value: string) =>
   value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
+function sanitizeStorageFileName(fileName: string) {
+  const fallbackName = 'documento';
+  const trimmedName = fileName.trim();
+  const extensionMatch = trimmedName.match(/\.([^.]+)$/);
+  const rawExtension = extensionMatch?.[1] ?? '';
+  const rawBaseName = rawExtension ? trimmedName.slice(0, -(rawExtension.length + 1)) : trimmedName;
+
+  const sanitizePart = (value: string) =>
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/ç/g, 'c')
+      .replace(/Ç/g, 'c')
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^[._-]+|[._-]+$/g, '');
+
+  const safeExtension = sanitizePart(rawExtension).replace(/[^a-z0-9]/g, '').slice(0, 12);
+  const maxBaseLength = safeExtension ? 120 - safeExtension.length - 1 : 120;
+  const safeBaseName = (sanitizePart(rawBaseName).slice(0, maxBaseLength).replace(/^[._-]+|[._-]+$/g, '') || fallbackName);
+
+  return safeExtension ? `${safeBaseName}.${safeExtension}` : safeBaseName;
+}
+
+function buildSafeStoragePath(prefix: string, fileName: string) {
+  return `${prefix.replace(/^\/+|\/+$/g, '')}/${Date.now()}-${sanitizeStorageFileName(fileName)}`;
+}
+
 const createCustomExecutionTaskId = (title: string) => {
   const slug = normalizeText(title).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return `custom-${slug || Date.now()}`;
@@ -1675,18 +1704,19 @@ function buildContractHtml(contract: ContractRecord) {
   <title>${escapeHtml(contract.id)} - ${escapeHtml(contract.client)}</title>
   <style>
     @page { size: A4; margin: 17mm; }
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { margin: 0; color: #17291c; font-family: Arial, Helvetica, sans-serif; background: #eef5ea; }
     .contract-page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 18mm; background: #fff; }
-    .contract-header { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; padding-bottom: 16px; border-bottom: 3px solid #1e4d2b; }
-    .brand { display: flex; gap: 12px; align-items: center; }
-    .brand-logo { width: 136px; height: auto; display: block; object-fit: contain; }
+    .contract-header { display: grid; grid-template-columns: 170px 1fr; gap: 24px; align-items: start; padding-bottom: 16px; border-bottom: 3px solid #1e4d2b; }
+    .brand { display: flex; align-items: flex-start; }
+    .brand-logo { width: 158px; height: auto; display: block; object-fit: contain; }
     h1, h2, h3, p { margin: 0; }
     h1 { margin: 24px 0 18px; color: #1e4d2b; font-size: 25px; text-align: center; letter-spacing: 0; }
     h2 { color: #14261a; font-size: 15px; margin: 20px 0 8px; }
-    .company strong { display: block; color: #14261a; font-size: 19px; }
-    .company span, .contact span { display: block; margin-top: 4px; color: #566557; font-size: 11px; line-height: 1.35; }
-    .contact { text-align: right; }
+    .company-info { text-align: right; }
+    .company-info strong { display: block; color: #14261a; font-size: 17px; line-height: 1.2; text-transform: uppercase; }
+    .company-info b { display: block; margin-top: 4px; color: #1e4d2b; font-size: 12px; line-height: 1.25; text-transform: uppercase; }
+    .company-info span { display: block; margin-top: 4px; color: #566557; font-size: 11px; line-height: 1.35; }
     .meta-grid, .party-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
     .meta-grid { grid-template-columns: repeat(4, 1fr); margin-bottom: 16px; }
     .box { border: 1px solid #dce8d6; border-radius: 9px; padding: 11px; background: #fbfdf8; }
@@ -1702,28 +1732,27 @@ function buildContractHtml(contract: ContractRecord) {
     .signature { text-align: center; color: #14261a; font-size: 12px; }
     .signature-line { height: 1px; margin: 42px 0 10px; background: #314436; }
     .footer-note { margin-top: 22px; color: #566557; font-size: 10px; text-align: center; }
-    @media print { body { background: #fff; } .contract-page { width: auto; min-height: auto; margin: 0; padding: 0; } }
+    @media (max-width: 720px) { .contract-header { grid-template-columns: 1fr; } .company-info { text-align: left; } }
+    @media print { body { background: #fff; } .contract-page { width: auto; min-height: auto; margin: 0; padding: 0; } .signature-line { background-color: #314436 !important; } }
   </style>
 </head>
 <body>
   <main class="contract-page">
     <header class="contract-header">
-      <div class="brand company">
+      <div class="brand">
         <img class="brand-logo" src="/assets/LogotipoEscura.png" alt="Anjos Soluções Ambientais" />
-        <div>
-          <strong>ANJOS AMBIENTAL</strong>
-          <span>Consultoria e Licenciamento Ambiental</span>
-          <span>CNPJ: ${escapeHtml(contract.contractedCnpj)}</span>
-        </div>
       </div>
-      <div class="contact">
-        <span>Endereço: ${escapeHtml(contract.contractedAddress)}</span>
-        <span>Telefone: ${escapeHtml(contract.contractedPhone)}</span>
-        <span>E-mail: contato@anjosambiental.com.br</span>
-        <span>Instagram: @anjosambiental</span>
+      <div class="company-info">
+        <strong>ANJOS AMBIENTAL CONSULTORIA LTDA</strong>
+        <b>ANJOS AMBIENTAL CONSULTORIA</b>
+        <span>CNPJ: 52.723.882/0001-17</span>
+        <span>Rua Dr. Francisco Ludovico de Almeida, nº 87, Quadra 17, Lote 7, Vila Santa Maria - Conjunto Caiçara, Goiânia/GO, CEP 74.775-011</span>
+        <span>Telefone: (63) 99203-6652</span>
+        <span>E-mail: ambientalanjos@gmail.com</span>
+        <span>Instagram: @ambientalanjos</span>
       </div>
     </header>
-    <h1>CONTRATO DE PRESTAÇÃO DE SERVIÇOS AMBIENTAIS Nº ${escapeHtml(contract.id.replace('CONT', ''))}</h1>
+    <h1>CONTRATO DE PRESTAÇÃO DE SERVIÇO</h1>
     <section class="meta-grid">
       <div class="box"><small>Data</small><strong>${escapeHtml(contract.contractDate)}</strong></div>
       <div class="box"><small>Proposta</small><strong>${escapeHtml(contract.proposalId)}</strong></div>
@@ -2248,6 +2277,13 @@ function buildStoredDocumentPath(bucket: string, storagePath: string) {
 function parseStoredDocumentPath(filePath?: string | null) {
   if (!filePath) return { bucket: undefined, storagePath: undefined };
   const normalizedPath = filePath.replace(/^\/+/, '');
+  const colonBucket = knownDocumentBuckets.find((item) => normalizedPath.startsWith(`${item}:`));
+  if (colonBucket) {
+    return {
+      bucket: colonBucket,
+      storagePath: normalizedPath.slice(colonBucket.length + 1).replace(/^\/+/, '')
+    };
+  }
   const bucket = knownDocumentBuckets.find((item) => normalizedPath === item || normalizedPath.startsWith(`${item}/`));
   if (bucket) {
     return {
@@ -3133,10 +3169,11 @@ export function App() {
     for (const item of fileItems) {
       if (typeof item === 'string') continue;
       const bucket = 'client-documents';
-      const storagePath = `clients/${client.id}/${Date.now()}-${item.name}`;
+      const storagePath = buildSafeStoragePath(`clients/${client.id}`, item.name);
       console.info('[Documentos] Upload cliente - arquivo selecionado', {
         file: item,
         fileName: item.name,
+        safeFileName: sanitizeStorageFileName(item.name),
         size: item.size,
         type: item.type,
         bucket,
@@ -3155,7 +3192,13 @@ export function App() {
           storagePath,
           error: uploadError
         });
-        window.alert(`Não foi possível enviar ${item.name} para o Supabase Storage.\n\n${uploadError.message}`);
+        await showAppAlert({
+          title: 'Não foi possível anexar o documento',
+          message: `O sistema encontrou um problema ao enviar este arquivo. Verifique o nome do arquivo ou tente novamente.`,
+          technicalDetails: `Arquivo: ${item.name}\nBucket: ${bucket}\nPath: ${storagePath}\nErro: ${uploadError.message}`,
+          type: 'error',
+          confirmText: 'OK'
+        });
         continue;
       }
 
@@ -3195,7 +3238,13 @@ export function App() {
           payload: documentPayload,
           error: insertError
         });
-        window.alert(`O arquivo ${item.name} foi enviado, mas os dados não foram salvos no banco.\n\n${insertError?.message ?? 'Erro desconhecido.'}`);
+        await showAppAlert({
+          title: 'Não foi possível salvar o documento',
+          message: `O arquivo foi enviado ao Storage, mas os dados não foram salvos no banco.`,
+          technicalDetails: `Arquivo: ${item.name}\nBucket: ${bucket}\nPath: ${storagePath}\nErro: ${insertError?.message ?? 'Erro desconhecido.'}`,
+          type: 'error',
+          confirmText: 'OK'
+        });
         continue;
       }
 
@@ -3234,10 +3283,12 @@ export function App() {
       let fileSize = 0;
 
       if (typeof item !== 'string' && process.dbId) {
-        storagePath = `processes/${process.dbId}/${normalizeText(category).replace(/\s+/g, '-')}/${Date.now()}-${item.name}`;
+        const safeCategory = sanitizeStorageFileName(category).replace(/\.[a-z0-9]{1,12}$/i, '') || 'documentos';
+        storagePath = buildSafeStoragePath(`processes/${process.dbId}/${safeCategory}`, item.name);
         console.info('[Documentos] Upload processo - arquivo selecionado', {
           file: item,
           fileName: item.name,
+          safeFileName: sanitizeStorageFileName(item.name),
           size: item.size,
           type: item.type,
           bucket,
@@ -3254,7 +3305,13 @@ export function App() {
             storagePath,
             error: uploadError
           });
-          window.alert(`Não foi possível enviar o arquivo para o Supabase Storage.\n\n${uploadError.message}`);
+          await showAppAlert({
+            title: 'Não foi possível anexar o documento',
+            message: `O sistema encontrou um problema ao enviar este arquivo. Verifique o nome do arquivo ou tente novamente.`,
+            technicalDetails: `Arquivo: ${item.name}\nBucket: ${bucket}\nPath: ${storagePath}\nErro: ${uploadError.message}`,
+            type: 'error',
+            confirmText: 'OK'
+          });
           continue;
         }
         console.info('[Documentos] Upload processo - arquivo salvo no Storage', {
@@ -3309,7 +3366,13 @@ export function App() {
             payload: documentPayload,
             error: documentError
           });
-          window.alert(`O arquivo ${fileName} foi enviado, mas os dados não foram salvos no banco.\n\n${documentError.message}`);
+          await showAppAlert({
+            title: 'Não foi possível salvar o documento',
+            message: `O arquivo foi enviado ao Storage, mas os dados não foram salvos no banco.`,
+            technicalDetails: `Arquivo: ${fileName}\nBucket: ${bucket}\nPath: ${storagePath || 'sem upload'}\nErro: ${documentError.message}`,
+            type: 'error',
+            confirmText: 'OK'
+          });
           continue;
         }
       }
