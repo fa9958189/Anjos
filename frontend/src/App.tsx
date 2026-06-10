@@ -5249,7 +5249,7 @@ function LandingPage() {
       });
 
       gsap.set('.tree-parallax-image-one', { opacity: 1, scale: 1 });
-      gsap.set('.tree-parallax-image-two', { opacity: 0, scale: 1.06 });
+      gsap.set('.tree-parallax-image-two', { opacity: 0, scale: 1.02 });
       gsap.timeline({
         scrollTrigger: {
           trigger: '.landing-tree-parallax',
@@ -5259,9 +5259,9 @@ function LandingPage() {
           invalidateOnRefresh: true
         }
       })
-        .to('.tree-parallax-image-one', { opacity: 0, scale: 0.98, ease: 'none', duration: 1 }, 0)
+        .to('.tree-parallax-image-one', { opacity: 0, scale: 0.99, ease: 'none', duration: 1 }, 0)
         .to('.tree-parallax-image-two', { opacity: 1, scale: 1, ease: 'none', duration: 1 }, 0)
-        .to('.tree-parallax-overlay', { opacity: 0.82, ease: 'none', duration: 1 }, 0);
+        .to('.tree-parallax-overlay', { opacity: 0.16, ease: 'none', duration: 1 }, 0);
     }, root);
 
     return () => {
