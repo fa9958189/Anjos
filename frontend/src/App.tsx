@@ -5248,20 +5248,6 @@ function LandingPage() {
         });
       });
 
-      gsap.set('.tree-parallax-image-one', { opacity: 1, scale: 1 });
-      gsap.set('.tree-parallax-image-two', { opacity: 0, scale: 1.02 });
-      gsap.timeline({
-        scrollTrigger: {
-          trigger: '.landing-tree-parallax',
-          start: 'top top',
-          end: 'bottom bottom',
-          scrub: 0.7,
-          invalidateOnRefresh: true
-        }
-      })
-        .to('.tree-parallax-image-one', { opacity: 0, scale: 0.99, ease: 'none', duration: 1 }, 0)
-        .to('.tree-parallax-image-two', { opacity: 1, scale: 1, ease: 'none', duration: 1 }, 0)
-        .to('.tree-parallax-overlay', { opacity: 0.16, ease: 'none', duration: 1 }, 0);
     }, root);
 
     return () => {
@@ -5336,21 +5322,13 @@ function LandingPage() {
         </div>
       </section>
 
-      <section className="landing-section landing-reveal" id="servicos">
+      <section className="landing-section landing-services-section landing-reveal" id="servicos">
         <div className="landing-section-heading">
           <p className="landing-eyebrow">Serviços</p>
           <h2>Soluções ambientais para cada etapa do processo</h2>
         </div>
         <div className="landing-services-grid">
           {institutionalServices.map((service) => <AnimatedServiceCard service={service} key={service.title} />)}
-        </div>
-      </section>
-
-      <section className="landing-tree-parallax" id="contato" aria-label="Paisagem ambiental Anjos">
-        <div className="tree-parallax-stage" aria-hidden="true">
-          <div className="tree-parallax-image tree-parallax-image-one" />
-          <div className="tree-parallax-image tree-parallax-image-two" />
-          <div className="tree-parallax-overlay" />
         </div>
       </section>
 
