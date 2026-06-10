@@ -5323,12 +5323,14 @@ function LandingPage() {
       </section>
 
       <section className="landing-section landing-services-section landing-reveal" id="servicos">
-        <div className="landing-section-heading">
-          <p className="landing-eyebrow">Serviços</p>
-          <h2>Soluções ambientais para cada etapa do processo</h2>
-        </div>
-        <div className="landing-services-grid">
-          {institutionalServices.map((service) => <AnimatedServiceCard service={service} key={service.title} />)}
+        <div className="landing-services-content">
+          <div className="landing-section-heading">
+            <p className="landing-eyebrow">Serviços</p>
+            <h2>Soluções ambientais para cada etapa do processo</h2>
+          </div>
+          <div className="landing-services-grid">
+            {institutionalServices.map((service) => <AnimatedServiceCard service={service} key={service.title} />)}
+          </div>
         </div>
       </section>
 
