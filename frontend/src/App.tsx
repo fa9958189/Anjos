@@ -1832,6 +1832,17 @@ function openContractPdf(contract: ContractRecord, print = false) {
   }
 }
 
+function notifyDocumentStorageIssue(title: string, message: string, technicalDetails?: string) {
+  window.dispatchEvent(new CustomEvent('anjos:app-alert', {
+    detail: {
+      title,
+      message,
+      technicalDetails,
+      type: 'warning'
+    }
+  }));
+}
+
 async function previewDocument(document: DocumentRecord) {
   console.info('[Documentos] Visualizar documento - dados', {
     fileName: document.fileName,
@@ -1839,9 +1850,13 @@ async function previewDocument(document: DocumentRecord) {
     storagePath: document.storagePath
   });
 
-  if (!document.bucket || !document.storagePath) {
+  if (!hasValidDocumentStorage(document)) {
     console.error('[Documentos] Visualizar documento - arquivo sem caminho do Storage', document);
-    window.alert('Este documento não possui caminho válido no Supabase Storage. Envie o arquivo novamente.');
+    notifyDocumentStorageIssue(
+      'Arquivo não encontrado',
+      'Este documento está registrado no processo, mas ainda não possui um arquivo válido anexado. Envie o arquivo novamente ou gere o documento pelo sistema.',
+      `Documento: ${document.fileName}\nCategoria: ${document.category}\nBucket: ${document.bucket ?? 'não informado'}\nPath: ${document.storagePath ?? 'não informado'}`
+    );
     return;
   }
 
@@ -1869,7 +1884,11 @@ async function previewDocument(document: DocumentRecord) {
     window.open(publicUrl, '_blank');
     return;
   }
-  window.alert(`Não foi possível abrir o arquivo no Supabase Storage.\n\n${error?.message ?? 'URL indisponível.'}`);
+  notifyDocumentStorageIssue(
+    'Não foi possível abrir o arquivo',
+    'O sistema encontrou um problema ao gerar a visualização deste documento no Supabase Storage.',
+    error?.message ?? 'URL indisponível.'
+  );
 }
 
 async function downloadDocument(document: DocumentRecord) {
@@ -1879,9 +1898,13 @@ async function downloadDocument(document: DocumentRecord) {
     storagePath: document.storagePath
   });
 
-  if (!document.bucket || !document.storagePath) {
+  if (!hasValidDocumentStorage(document)) {
     console.error('[Documentos] Baixar documento - arquivo sem caminho do Storage', document);
-    window.alert('Este documento não possui caminho válido no Supabase Storage. Envie o arquivo novamente.');
+    notifyDocumentStorageIssue(
+      'Arquivo não encontrado',
+      'Este documento está registrado no processo, mas ainda não possui um arquivo válido anexado. Envie o arquivo novamente ou gere o documento pelo sistema.',
+      `Documento: ${document.fileName}\nCategoria: ${document.category}\nBucket: ${document.bucket ?? 'não informado'}\nPath: ${document.storagePath ?? 'não informado'}`
+    );
     return;
   }
 
@@ -1893,7 +1916,11 @@ async function downloadDocument(document: DocumentRecord) {
       storagePath: document.storagePath,
       error
     });
-    window.alert(`Não foi possível baixar o arquivo no Supabase Storage.\n\n${error?.message ?? 'Arquivo indisponível.'}`);
+    notifyDocumentStorageIssue(
+      'Não foi possível baixar o arquivo',
+      'O sistema encontrou um problema ao baixar este documento no Supabase Storage.',
+      error?.message ?? 'Arquivo indisponível.'
+    );
     return;
   }
 
@@ -2341,23 +2368,46 @@ function buildStoredDocumentPath(bucket: string, storagePath: string) {
 }
 
 function parseStoredDocumentPath(filePath?: string | null) {
-  if (!filePath) return { bucket: undefined, storagePath: undefined };
-  const normalizedPath = filePath.replace(/^\/+/, '');
+  if (!filePath?.trim()) return { bucket: undefined, storagePath: undefined };
+  const rawPath = filePath.trim();
+
+  if (/^https?:\/\//i.test(rawPath)) {
+    try {
+      const url = new URL(rawPath);
+      const storageMatch = url.pathname.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/]+)\/(.+)$/);
+      if (storageMatch?.[1] && storageMatch[2]) {
+        return {
+          bucket: decodeURIComponent(storageMatch[1]),
+          storagePath: decodeURIComponent(storageMatch[2]).replace(/^\/+/, '')
+        };
+      }
+    } catch {
+      return { bucket: undefined, storagePath: undefined };
+    }
+  }
+
+  const normalizedPath = rawPath.replace(/^\/+/, '');
   const colonBucket = knownDocumentBuckets.find((item) => normalizedPath.startsWith(`${item}:`));
   if (colonBucket) {
+    const storagePath = normalizedPath.slice(colonBucket.length + 1).replace(/^\/+/, '');
     return {
       bucket: colonBucket,
-      storagePath: normalizedPath.slice(colonBucket.length + 1).replace(/^\/+/, '')
+      storagePath: storagePath || undefined
     };
   }
   const bucket = knownDocumentBuckets.find((item) => normalizedPath === item || normalizedPath.startsWith(`${item}/`));
   if (bucket) {
+    const storagePath = normalizedPath.slice(bucket.length + 1).replace(/^\/+/, '');
     return {
       bucket,
-      storagePath: normalizedPath.slice(bucket.length + 1)
+      storagePath: storagePath || undefined
     };
   }
   return { bucket: undefined, storagePath: normalizedPath };
+}
+
+function hasValidDocumentStorage(document: DocumentRecord): document is DocumentRecord & { bucket: string; storagePath: string } {
+  return Boolean(document.bucket?.trim() && document.storagePath?.trim());
 }
 
 function mapDbDocumentToDocument(document: DbDocument, processes: EnvironmentalProcess[]): DocumentRecord {
@@ -2845,6 +2895,17 @@ export function App() {
       setAppDialog({ ...dialog, mode: 'alert' });
     });
   }
+
+  useEffect(() => {
+    const handleDocumentAlert = (event: Event) => {
+      const detail = (event as CustomEvent<Omit<AppDialogState, 'mode' | 'cancelText'>>).detail;
+      if (!detail?.title || !detail.message) return;
+      void showAppAlert(detail);
+    };
+
+    window.addEventListener('anjos:app-alert', handleDocumentAlert);
+    return () => window.removeEventListener('anjos:app-alert', handleDocumentAlert);
+  }, []);
 
   const refreshDashboard = useCallback(async (showLoading = false) => {
     if (showLoading) {
@@ -5918,10 +5979,15 @@ function DocumentFolderCard({
   readOnly?: boolean;
 }) {
   const hasDocuments = documents.length > 0;
+  const validStorageDocuments = documents.filter(hasValidDocumentStorage);
+  const hasStorageFiles = validStorageDocuments.length > 0;
   const visibleDocuments = readOnly ? documents : documents.slice(0, 2);
+  const folderClassName = hasDocuments
+    ? hasStorageFiles ? 'document-folder-card filled' : 'document-folder-card missing-file'
+    : 'document-folder-card';
 
   return (
-    <div className={hasDocuments ? 'document-folder-card filled' : 'document-folder-card'}>
+    <div className={folderClassName}>
       <div className="document-folder-main">
         <span className="folder-icon"><FolderOpen size={22} /></span>
         <div>
@@ -5930,29 +5996,40 @@ function DocumentFolderCard({
         </div>
       </div>
       <div className="document-folder-status">
-        <span>{hasDocuments ? `${documents.length} arquivo(s)` : 'Pendente'}</span>
+        <span>{hasStorageFiles ? `${validStorageDocuments.length} arquivo(s)` : hasDocuments ? 'Sem arquivo' : 'Pendente'}</span>
       </div>
       {hasDocuments ? (
         <div className="document-folder-files">
-          {visibleDocuments.map((document) => (
-            <div className="folder-file-row" key={document.id}>
-              <FileText size={14} />
-              <span>{document.fileName}</span>
-              <div className="folder-file-actions">
-                <button type="button" onClick={() => previewDocument(document)} aria-label={`Visualizar ${document.fileName}`}>
-                  <Eye size={14} />
-                </button>
-                <button type="button" onClick={() => downloadDocument(document)} aria-label={`Baixar ${document.fileName}`}>
-                  <Download size={14} />
-                </button>
-                {!readOnly && onDeleteDocument ? (
-                  <button type="button" className="danger" onClick={() => onDeleteDocument(document.id)} aria-label={`Excluir ${document.fileName}`}>
-                    <Trash2 size={14} />
-                  </button>
-                ) : null}
+          {visibleDocuments.map((document) => {
+            const hasStorageFile = hasValidDocumentStorage(document);
+            return (
+              <div className={hasStorageFile ? 'folder-file-row' : 'folder-file-row missing-file'} key={document.id}>
+                <FileText size={14} />
+                <span title={document.fileName}>{document.fileName}</span>
+                <div className="folder-file-actions">
+                  {hasStorageFile ? (
+                    <>
+                      <button type="button" onClick={() => previewDocument(document)} aria-label={`Visualizar ${document.fileName}`}>
+                        <Eye size={14} />
+                      </button>
+                      <button type="button" onClick={() => downloadDocument(document)} aria-label={`Baixar ${document.fileName}`}>
+                        <Download size={14} />
+                      </button>
+                    </>
+                  ) : (
+                    <span className="folder-file-missing" title="Este documento está registrado, mas ainda não possui arquivo válido anexado.">
+                      Sem arquivo
+                    </span>
+                  )}
+                  {!readOnly && onDeleteDocument ? (
+                    <button type="button" className="danger" onClick={() => onDeleteDocument(document.id)} aria-label={`Excluir ${document.fileName}`}>
+                      <Trash2 size={14} />
+                    </button>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {!readOnly && documents.length > 2 ? <small>+ {documents.length - 2} arquivo(s)</small> : null}
         </div>
       ) : null}
@@ -7392,8 +7469,9 @@ function FollowUpDocumentsModal({
     return 'Propriedade';
   }
 
+  const storedDocuments = allDocuments.filter(hasValidDocumentStorage);
   const totalPending = followUpDocumentSections.reduce((total, section) => (
-    total + section.categories.filter((category) => getCategoryDocuments(category).length === 0).length
+    total + section.categories.filter((category) => !getCategoryDocuments(category).some(hasValidDocumentStorage)).length
   ), 0);
 
   return (
@@ -7420,8 +7498,8 @@ function FollowUpDocumentsModal({
 
       <div className="document-folder-summary">
         <div>
-          <strong>{allDocuments.length} arquivo(s) localizados</strong>
-          <span>{totalPending} pasta(s) ainda sem documento vinculado.</span>
+          <strong>{storedDocuments.length} arquivo(s) localizados</strong>
+          <span>{totalPending} pasta(s) ainda sem arquivo válido vinculado.</span>
         </div>
         <span>{row.department}</span>
       </div>
@@ -8559,8 +8637,10 @@ function ExecutionDocumentsCentral({
     return documents.filter((document) => normalizeText(document.category) === normalizeText(category) || normalizeText(document.name).includes(normalizeText(category)));
   }
 
-  const totalDocuments = documents.length;
-  const pendingCategories = executionDocumentSections.reduce((total, section) => total + section.categories.filter((category) => getCategoryDocuments(category).length === 0).length, 0);
+  const totalDocuments = documents.filter(hasValidDocumentStorage).length;
+  const pendingCategories = executionDocumentSections.reduce((total, section) => (
+    total + section.categories.filter((category) => !getCategoryDocuments(category).some(hasValidDocumentStorage)).length
+  ), 0);
 
   return (
     <aside className="execution-documents-central">
