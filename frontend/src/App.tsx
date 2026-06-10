@@ -5247,6 +5247,21 @@ function LandingPage() {
           ease: 'power2.out'
         });
       });
+
+      gsap.set('.tree-parallax-image-one', { opacity: 1, scale: 1 });
+      gsap.set('.tree-parallax-image-two', { opacity: 0, scale: 1.06 });
+      gsap.timeline({
+        scrollTrigger: {
+          trigger: '.landing-tree-parallax',
+          start: 'top top',
+          end: 'bottom bottom',
+          scrub: 0.7,
+          invalidateOnRefresh: true
+        }
+      })
+        .to('.tree-parallax-image-one', { opacity: 0, scale: 0.98, ease: 'none', duration: 1 }, 0)
+        .to('.tree-parallax-image-two', { opacity: 1, scale: 1, ease: 'none', duration: 1 }, 0)
+        .to('.tree-parallax-overlay', { opacity: 0.82, ease: 'none', duration: 1 }, 0);
     }, root);
 
     return () => {
@@ -5331,28 +5346,12 @@ function LandingPage() {
         </div>
       </section>
 
-      <section className="landing-section landing-contact landing-reveal" id="contato">
-        <div className="landing-contact-copy">
-          <p className="landing-eyebrow">Contato</p>
-          <h2>Vamos regularizar seu imóvel ou empreendimento?</h2>
-          <p>Fale com a Anjos Ambiental e receba orientação para conduzir seu processo ambiental com segurança, organização e agilidade.</p>
-          <div className="landing-contact-actions">
-            <a className="landing-primary-button" href="https://wa.me/5563992036652" target="_blank" rel="noreferrer">
-              <MessageCircle size={19} /> Falar no WhatsApp
-            </a>
-            <a className="landing-secondary-button" href="/login">Acessar Sistema</a>
-          </div>
+      <section className="landing-tree-parallax" id="contato" aria-label="Paisagem ambiental Anjos">
+        <div className="tree-parallax-stage" aria-hidden="true">
+          <div className="tree-parallax-image tree-parallax-image-one" />
+          <div className="tree-parallax-image tree-parallax-image-two" />
+          <div className="tree-parallax-overlay" />
         </div>
-        <aside className="landing-contact-card" aria-label="Informações de atendimento">
-          <span>Atendimento Anjos</span>
-          <strong>(63) 99203-6652</strong>
-          <ul>
-            <li>Atendimento técnico</li>
-            <li>Processos ambientais</li>
-            <li>Organização de documentos</li>
-            <li>Acompanhamento até a conclusão</li>
-          </ul>
-        </aside>
       </section>
 
       <footer className="landing-footer">
