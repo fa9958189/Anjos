@@ -5013,11 +5013,9 @@ export function App() {
             selectedProcessId={selectedExecutionProcessId}
             onSelectProcess={setSelectedExecutionProcessId}
             onClose={() => setSelectedExecutionProcessId(null)}
-            onAddOfficeAction={addOfficeAction}
             onAddFieldVisit={addFieldVisit}
             onAddCustomTask={addCustomExecutionTask}
             onUpdateTask={updateExecutionTask}
-            onUpdateNotes={updateExecutionNotes}
             onUpdateFieldChecklist={updateExecutionFieldChecklist}
             onAttachDocuments={attachProcessDocuments}
             onDeleteDocument={deleteDocument}
@@ -7880,11 +7878,9 @@ function ExecutionView({
   selectedProcessId,
   onSelectProcess,
   onClose,
-  onAddOfficeAction,
   onAddFieldVisit,
   onAddCustomTask,
   onUpdateTask,
-  onUpdateNotes,
   onUpdateFieldChecklist,
   onAttachDocuments,
   onDeleteDocument
@@ -7898,11 +7894,9 @@ function ExecutionView({
   selectedProcessId: string | null;
   onSelectProcess: (processId: string) => void;
   onClose: () => void;
-  onAddOfficeAction: (processId: string, action: OfficeAction) => void;
   onAddFieldVisit: (processId: string, visit: FieldVisit) => void;
   onAddCustomTask: (processId: string, task: ExecutionTask) => void;
   onUpdateTask: (processId: string, task: ExecutionTask) => void;
-  onUpdateNotes: (processId: string, notes: string) => void;
   onUpdateFieldChecklist: (processId: string, item: FieldChecklistItem) => void;
   onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
   onDeleteDocument: (documentId: string) => boolean | void | Promise<boolean | void>;
@@ -7987,11 +7981,9 @@ function ExecutionView({
             finance={executionFinanceByProcess.get(selectedProcess.id) ?? null}
             documents={documents.filter((document) => document.processId === selectedProcess.id || document.client === selectedProcess.client)}
             onClose={onClose}
-            onAddOfficeAction={onAddOfficeAction}
             onAddFieldVisit={onAddFieldVisit}
             onAddCustomTask={onAddCustomTask}
             onUpdateTask={onUpdateTask}
-            onUpdateNotes={onUpdateNotes}
             onUpdateFieldChecklist={onUpdateFieldChecklist}
             onAttachDocuments={onAttachDocuments}
             onDeleteDocument={onDeleteDocument}
@@ -8009,11 +8001,9 @@ function ExecutionModal({
   finance,
   documents,
   onClose,
-  onAddOfficeAction,
   onAddFieldVisit,
   onAddCustomTask,
   onUpdateTask,
-  onUpdateNotes,
   onUpdateFieldChecklist,
   onAttachDocuments,
   onDeleteDocument
@@ -8024,11 +8014,9 @@ function ExecutionModal({
   finance: FinancialRecord | null;
   documents: DocumentRecord[];
   onClose: () => void;
-  onAddOfficeAction: (processId: string, action: OfficeAction) => void;
   onAddFieldVisit: (processId: string, visit: FieldVisit) => void;
   onAddCustomTask: (processId: string, task: ExecutionTask) => void;
   onUpdateTask: (processId: string, task: ExecutionTask) => void;
-  onUpdateNotes: (processId: string, notes: string) => void;
   onUpdateFieldChecklist: (processId: string, item: FieldChecklistItem) => void;
   onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
   onDeleteDocument: (documentId: string) => void;
@@ -8072,10 +8060,8 @@ function ExecutionModal({
           process={process}
           record={record}
           documents={documents}
-          onAdd={onAddOfficeAction}
           onAddCustomTask={onAddCustomTask}
           onUpdateTask={onUpdateTask}
-          onUpdateNotes={onUpdateNotes}
           onAttachDocuments={onAttachDocuments}
           onDeleteDocument={onDeleteDocument}
         />
@@ -8098,20 +8084,16 @@ function OfficeExecutionPanel({
   process,
   record,
   documents,
-  onAdd,
   onAddCustomTask,
   onUpdateTask,
-  onUpdateNotes,
   onAttachDocuments,
   onDeleteDocument
 }: {
   process: EnvironmentalProcess;
   record: ExecutionRecord;
   documents: DocumentRecord[];
-  onAdd: (processId: string, action: OfficeAction) => void;
   onAddCustomTask: (processId: string, task: ExecutionTask) => void;
   onUpdateTask: (processId: string, task: ExecutionTask) => void;
-  onUpdateNotes: (processId: string, notes: string) => void;
   onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
   onDeleteDocument: (documentId: string) => boolean | void | Promise<boolean | void>;
 }) {
@@ -8120,16 +8102,6 @@ function OfficeExecutionPanel({
   const [selectedTaskId, setSelectedTaskId] = useState(tasks[0]?.id ?? '');
   const [editingTask, setEditingTask] = useState<ExecutionTask | null>(null);
   const [isAddingTask, setIsAddingTask] = useState(false);
-  const [internalNotes, setInternalNotes] = useState(record.internalNotes ?? '');
-  const [form, setForm] = useState<OfficeAction>({
-    type: '',
-    agency: '',
-    protocol: '',
-    date: new Date().toLocaleDateString('pt-BR'),
-    responsible: '',
-    description: '',
-    status: 'Em andamento'
-  });
 
   useEffect(() => {
     if (!tasks.length) {
@@ -8141,16 +8113,6 @@ function OfficeExecutionPanel({
     }
   }, [tasks, selectedTaskId]);
 
-  function update<K extends keyof OfficeAction>(field: K, value: OfficeAction[K]) {
-    setForm((current) => ({ ...current, [field]: value }));
-  }
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    onAdd(process.id, form);
-    setForm({ type: '', agency: '', protocol: '', date: new Date().toLocaleDateString('pt-BR'), responsible: '', description: '', status: 'Em andamento' });
-  }
-
   const completedTasks = tasks.filter((task) => ['Concluído', 'Aprovado', 'Cliente já possui', 'Não se aplica'].includes(task.status)).length;
   const progress = Math.round((completedTasks / Math.max(tasks.length, 1)) * 100);
   const filteredTasks = tasks.filter((task) => {
@@ -8161,10 +8123,6 @@ function OfficeExecutionPanel({
     return task.status === filter;
   });
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? tasks[0] ?? null;
-
-  function saveNotes() {
-    onUpdateNotes(process.id, internalNotes);
-  }
 
   function removeTaskAttachment(task: ExecutionTask, fileName: string) {
     const relatedDocument = documents.find((document) => document.processId === process.id && document.fileName === fileName);
@@ -8289,34 +8247,6 @@ function OfficeExecutionPanel({
           </section>
         ) : null}
 
-        <section className="execution-notes-panel">
-          <p className="eyebrow">Observações internas</p>
-          <textarea value={internalNotes} onChange={(event) => setInternalNotes(event.target.value)} placeholder="Cliente já possui cadastro, senha divergente, aguardando documentação..." />
-          <button type="button" className="primary-button dark" onClick={saveNotes}>Salvar observações</button>
-        </section>
-
-        <div className="execution-history-layout">
-          <ExecutionList title="Histórico operacional" items={(record.history ?? []).map((item) => ({ title: item.action, meta: `${item.date} - ${item.responsible}`, description: item.observation }))} />
-          <form className="technical-analysis-form compact-form" onSubmit={submit}>
-            <div className="analysis-heading">
-              <div>
-                <p className="eyebrow">Registro livre</p>
-                <h3>Ação técnica avulsa</h3>
-              </div>
-              <ClipboardCheck size={22} />
-            </div>
-            <div className="form-grid">
-              <label>Tipo da ação<input value={form.type} onChange={(event) => update('type', event.target.value)} placeholder="Cadastro, protocolo, e-mail..." /></label>
-              <label>Órgão / sistema<input value={form.agency} onChange={(event) => update('agency', event.target.value)} placeholder="Naturatins, IBAMA, ANA..." /></label>
-              <label>Protocolo<input value={form.protocol} onChange={(event) => update('protocol', event.target.value)} placeholder="Número ou observação" /></label>
-              <label>Data<input value={form.date} onChange={(event) => update('date', event.target.value)} /></label>
-              <label>Responsável<input value={form.responsible} onChange={(event) => update('responsible', event.target.value)} placeholder="Técnico responsável" /></label>
-              <label>Status<select value={form.status} onChange={(event) => update('status', event.target.value as OfficeAction['status'])}><option>Pendente</option><option>Em andamento</option><option>Concluído</option></select></label>
-              <label className="wide-field">Descrição<textarea value={form.description} onChange={(event) => update('description', event.target.value)} placeholder="Descreva uma movimentação fora dos cards principais" /></label>
-            </div>
-            <div className="form-actions"><span /><button className="primary-button dark" type="submit">Salvar ação</button></div>
-          </form>
-        </div>
       </div>
 
       <ExecutionDocumentsCentral process={process} documents={documents} onAttachDocuments={onAttachDocuments} onDeleteDocument={onDeleteDocument} />
@@ -8513,9 +8443,8 @@ function FieldExecutionPanel({
         </div>
         {checklist.length === 0 ? (
           <div className="execution-empty-state compact">
-            <h3>Nenhum item de checklist criado</h3>
-            <p>Crie itens personalizados somente para as ações de campo necessárias neste processo.</p>
-            <button className="secondary-light-button" type="button" onClick={openNewChecklistModal}>Criar checklist de campo</button>
+            <h3>Nenhum item lançado ainda</h3>
+            <p>Os itens criados pelo botão "Criar checklist de campo" aparecerão aqui.</p>
           </div>
         ) : (
           <div className="field-checklist-grid">
@@ -8571,9 +8500,8 @@ function FieldExecutionPanel({
         </div>
         {visits.length === 0 ? (
           <div className="execution-empty-state compact">
-            <h3>Nenhuma visita registrada</h3>
-            <p>Registre uma ficha de campo quando houver visita, coleta de coordenadas, fotos ou observações em campo.</p>
-            <button className="primary-button dark" type="button" onClick={openNewVisitModal}>Registrar ficha de campo</button>
+            <h3>Nenhuma visita registrada ainda</h3>
+            <p>As fichas criadas pelo botão "Registrar ficha de campo" aparecerão aqui.</p>
           </div>
         ) : (
           <div className="field-visit-grid">
