@@ -3,6 +3,7 @@ import {
   ArrowRight,
   BadgeDollarSign,
   Bell,
+  CheckCircle2,
   Download,
   Eye,
   EyeOff,
@@ -1426,25 +1427,19 @@ const createCustomExecutionTaskId = (title: string) => {
   return `custom-${slug || Date.now()}`;
 };
 
-const createDefaultExecutionTasks = (): ExecutionTask[] =>
-  executionTaskTemplates.map((template, index) => ({
-    ...template,
-    status: index === 0 ? 'Em andamento' : 'Não iniciado',
-    responsible: 'Técnico escritório',
-    updatedAt: new Date().toLocaleDateString('pt-BR'),
-    protocol: index === 0 ? 'Em preparação' : '',
-    login: '',
-    password: '',
-    observation: index === 0 ? 'Cadastro em preparação com base nos documentos já recebidos.' : '',
-    attachments: []
-  }));
+const createCustomFieldChecklistItemId = (title: string) => {
+  const slug = normalizeText(title).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return `field-${slug || Date.now()}`;
+};
+
+const createDefaultExecutionTasks = (): ExecutionTask[] => [];
 
 const createDefaultExecutionRecord = (processId: string): ExecutionRecord => ({
   processId,
   officeActions: [],
   fieldVisits: [],
   tasks: createDefaultExecutionTasks(),
-  fieldChecklist: defaultFieldChecklist.map((item) => ({ ...item, attachments: [...item.attachments] })),
+  fieldChecklist: [],
   history: [
     {
       id: `HIST-${processId}-001`,
@@ -1457,7 +1452,7 @@ const createDefaultExecutionRecord = (processId: string): ExecutionRecord => ({
   internalNotes: 'Conferir documentos obrigatórios antes de iniciar cadastros externos.'
 });
 
-const getExecutionStatusClass = (status: ExecutionTaskStatus | FieldChecklistItem['status']) =>
+const getExecutionStatusClass = (status: ExecutionTaskStatus | FieldChecklistItem['status'] | FieldVisit['status']) =>
   normalizeText(status).replace(/\s+/g, '-').replace('/', '-');
 
 const calculateProposalTotal = (services: ProposalServiceItem[]) =>
@@ -2436,62 +2431,39 @@ function mapDbExecutionToExecutionRecord(execution: DbExecution, process: Enviro
   const defaultRecord = createDefaultExecutionRecord(process?.id ?? execution.process_id);
   const taskRows = execution.execution_tasks ?? [];
   const checklistRows = execution.field_checklist_items ?? [];
-  const tasks = createDefaultExecutionTasks().map((template) => {
-    const row = taskRows.find((item) => item.task_key === template.id || item.title === template.title);
-    return row ? {
-      id: row.task_key ?? template.id,
-      title: row.title ?? template.title,
-      status: mapDbExecutionTaskStatus(row.status),
-      responsible: row.responsible ?? '',
-      updatedAt: formatDateBR(row.updated_at),
-      protocol: row.protocol ?? '',
-      login: row.login ?? '',
-      password: row.password_ref ?? '',
-      observation: row.observation ?? '',
-      attachments: row.attachments ?? [],
-      suggestedDocuments: row.suggested_documents ?? template.suggestedDocuments
-    } : template;
-  });
-  const defaultTaskKeys = new Set(executionTaskTemplates.map((template) => template.id));
-  const defaultTaskTitles = new Set(executionTaskTemplates.map((template) => normalizeText(template.title)));
-  const customTasks = taskRows
-    .filter((row) => {
-      const taskKey = row.task_key ?? '';
-      const title = row.title ?? '';
-      return !defaultTaskKeys.has(taskKey) && !defaultTaskTitles.has(normalizeText(title));
-    })
-    .map((row) => ({
-      id: row.task_key ?? `custom-${row.id}`,
-      title: row.title,
-      status: mapDbExecutionTaskStatus(row.status),
-      responsible: row.responsible ?? '',
-      updatedAt: formatDateBR(row.updated_at),
-      protocol: row.protocol ?? '',
-      login: row.login ?? '',
-      password: row.password_ref ?? '',
-      observation: row.observation ?? '',
-      attachments: row.attachments ?? [],
-      suggestedDocuments: row.suggested_documents ?? []
-    }));
+  const tasks = taskRows
+    .map((row) => {
+      const matchingTemplate = executionTaskTemplates.find((template) => template.id === row.task_key || normalizeText(template.title) === normalizeText(row.title ?? ''));
+      return {
+        id: row.task_key ?? `custom-${row.id}`,
+        title: row.title,
+        status: mapDbExecutionTaskStatus(row.status),
+        responsible: row.responsible ?? '',
+        updatedAt: formatDateBR(row.updated_at),
+        protocol: row.protocol ?? '',
+        login: row.login ?? '',
+        password: row.password_ref ?? '',
+        observation: row.observation ?? '',
+        attachments: row.attachments ?? [],
+        suggestedDocuments: row.suggested_documents ?? matchingTemplate?.suggestedDocuments ?? []
+      };
+    });
 
-  const fieldChecklist = defaultFieldChecklist.map((template) => {
-    const row = checklistRows.find((item) => item.item_key === template.id || item.title === template.title);
-    return row ? {
-      dbId: row.id,
-      id: row.item_key ?? template.id,
-      title: row.title ?? template.title,
-      status: mapDbFieldChecklistStatus(row.status),
-      observation: row.observation ?? '',
-      attachments: row.attachments ?? []
-    } : template;
-  });
+  const fieldChecklist = checklistRows.map((row) => ({
+    dbId: row.id,
+    id: row.item_key ?? `field-${row.id}`,
+    title: row.title,
+    status: mapDbFieldChecklistStatus(row.status),
+    observation: row.observation ?? '',
+    attachments: row.attachments ?? []
+  }));
 
   return {
     ...defaultRecord,
     dbId: execution.id,
     processDbId: execution.process_id,
     processId: process?.id ?? execution.process_id,
-    tasks: [...tasks, ...customTasks],
+    tasks,
     fieldChecklist,
     officeActions: [],
     fieldVisits: (execution.field_visits ?? []).map((visit) => ({
@@ -4457,29 +4429,39 @@ export function App() {
     let savedVisitId = visit.id;
 
     if (execution?.dbId && process?.dbId) {
-      const { data: savedVisit } = await supabase
-        .from('field_visits')
-        .insert({
-          execution_id: execution.dbId,
-          process_id: process.dbId,
-          visit_date: formatDateToDb(visit.date),
-          responsible: visit.responsible || null,
-          location: visit.location || null,
-          coordinates: visit.coordinates || null,
-          notes: visit.notes || null,
-          checklist: visit.checklist || null,
-          status: mapFieldVisitStatusToDb(visit.status)
-        })
-        .select('id')
-        .single();
-      savedVisitId = savedVisit?.id ?? savedVisitId;
+      const payload = {
+        execution_id: execution.dbId,
+        process_id: process.dbId,
+        visit_date: formatDateToDb(visit.date),
+        responsible: visit.responsible || null,
+        location: visit.location || null,
+        coordinates: visit.coordinates || null,
+        notes: visit.notes || null,
+        checklist: visit.checklist || null,
+        status: mapFieldVisitStatusToDb(visit.status)
+      };
+
+      if (visit.id) {
+        await supabase.from('field_visits').update(payload).eq('id', visit.id);
+      } else {
+        const { data: savedVisit } = await supabase
+          .from('field_visits')
+          .insert(payload)
+          .select('id')
+          .single();
+        savedVisitId = savedVisit?.id ?? savedVisitId;
+      }
     }
 
     const nextVisit = { ...visit, id: savedVisitId };
     setExecutionRecords((current) => {
       const existing = current.find((record) => record.processId === processId);
       if (existing) {
-        return current.map((record) => record.processId === processId ? { ...record, fieldVisits: [nextVisit, ...record.fieldVisits] } : record);
+        const existingVisits = existing.fieldVisits ?? [];
+        const nextVisits = existingVisits.some((currentVisit) => currentVisit.id === nextVisit.id)
+          ? existingVisits.map((currentVisit) => currentVisit.id === nextVisit.id ? nextVisit : currentVisit)
+          : [nextVisit, ...existingVisits];
+        return current.map((record) => record.processId === processId ? { ...record, fieldVisits: nextVisits } : record);
       }
       return [{ ...createDefaultExecutionRecord(processId), dbId: execution?.dbId, processDbId: process?.dbId, fieldVisits: [nextVisit] }, ...current];
     });
@@ -4530,7 +4512,7 @@ export function App() {
 
     setExecutionRecords((current) => {
       const baseRecord = current.find((record) => record.processId === processId) ?? { ...createDefaultExecutionRecord(processId), dbId: execution?.dbId, processDbId: process?.dbId };
-      const currentTasks = baseRecord.tasks ?? createDefaultExecutionTasks();
+      const currentTasks = baseRecord.tasks ?? [];
       const updatedTasks = currentTasks.some((item) => item.id === task.id)
         ? currentTasks.map((item) => item.id === task.id ? task : item)
         : [...currentTasks, task];
@@ -4548,7 +4530,7 @@ export function App() {
     const execution = await ensureExecutionRecord(processId);
     const process = processes.find((item) => item.id === processId);
     const existingRecord = executionRecords.find((record) => record.processId === processId);
-    const existingTasks = existingRecord?.tasks ?? createDefaultExecutionTasks();
+    const existingTasks = existingRecord?.tasks ?? [];
     const hasDuplicate = existingTasks.some((item) => item.id === task.id || normalizeText(item.title) === normalizeText(task.title));
 
     if (hasDuplicate) {
@@ -4600,7 +4582,7 @@ export function App() {
       const baseRecord = current.find((record) => record.processId === processId) ?? { ...createDefaultExecutionRecord(processId), dbId: execution?.dbId, processDbId: process?.dbId };
       const updatedRecord = {
         ...baseRecord,
-        tasks: [...(baseRecord.tasks ?? createDefaultExecutionTasks()), task],
+        tasks: [...(baseRecord.tasks ?? []), task],
         history: [historyItem, ...(baseRecord.history ?? [])]
       };
       return current.some((record) => record.processId === processId)
@@ -4653,12 +4635,14 @@ export function App() {
         observation: item.observation || null,
         attachments: item.attachments
       };
-      const { data: existingItem } = await supabase
-        .from('field_checklist_items')
-        .select('id')
-        .eq('execution_id', execution.dbId)
-        .eq('item_key', item.id)
-        .maybeSingle();
+      const existingItem = item.dbId
+        ? { id: item.dbId }
+        : (await supabase
+          .from('field_checklist_items')
+          .select('id')
+          .eq('execution_id', execution.dbId)
+          .eq('item_key', item.id)
+          .maybeSingle()).data;
 
       if (existingItem?.id) {
         await supabase.from('field_checklist_items').update(payload).eq('id', existingItem.id);
@@ -4669,8 +4653,11 @@ export function App() {
 
     setExecutionRecords((current) => {
       const baseRecord = current.find((record) => record.processId === processId) ?? { ...createDefaultExecutionRecord(processId), dbId: execution?.dbId, processDbId: process?.dbId };
-      const checklist = baseRecord.fieldChecklist ?? defaultFieldChecklist;
-      const updatedRecord = { ...baseRecord, fieldChecklist: checklist.map((currentItem) => currentItem.id === item.id ? item : currentItem) };
+      const checklist = baseRecord.fieldChecklist ?? [];
+      const updatedChecklist = checklist.some((currentItem) => currentItem.id === item.id)
+        ? checklist.map((currentItem) => currentItem.id === item.id ? item : currentItem)
+        : [item, ...checklist];
+      const updatedRecord = { ...baseRecord, fieldChecklist: updatedChecklist };
       return current.some((record) => record.processId === processId)
         ? current.map((record) => record.processId === processId ? updatedRecord : record)
         : [updatedRecord, ...current];
@@ -7929,9 +7916,9 @@ function ExecutionView({
   const selectedProcess = executionProcesses.find((process) => process.id === selectedProcessId) ?? null;
   const selectedRecord = selectedProcess ? records.find((record) => record.processId === selectedProcess.id) ?? createDefaultExecutionRecord(selectedProcess.id) : null;
   const executionRecords = executionProcesses.map((process) => records.find((record) => record.processId === process.id) ?? createDefaultExecutionRecord(process.id));
-  const allTasks = executionRecords.flatMap((record) => record.tasks ?? createDefaultExecutionTasks());
+  const allTasks = executionRecords.flatMap((record) => record.tasks ?? []);
   const officeCount = allTasks.filter((task) => task.status !== 'Não iniciado' && task.status !== 'Não se aplica').length;
-  const fieldCount = executionRecords.reduce((total, record) => total + (record.fieldChecklist ?? defaultFieldChecklist).filter((item) => item.status !== 'Não iniciado').length, 0);
+  const fieldCount = executionRecords.reduce((total, record) => total + (record.fieldChecklist ?? []).filter((item) => item.status !== 'Não iniciado').length, 0);
   const waitingApprovalCount = allTasks.filter((task) => task.status === 'Aguardando aprovação').length;
   const pendingDocumentsCount = allTasks.filter((task) => task.status === 'Pendente documentação').length;
   const completedCount = allTasks.filter((task) => task.status === 'Concluído' || task.status === 'Aprovado' || task.status === 'Cliente já possui').length;
@@ -8128,7 +8115,7 @@ function OfficeExecutionPanel({
   onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
   onDeleteDocument: (documentId: string) => boolean | void | Promise<boolean | void>;
 }) {
-  const tasks = record.tasks ?? createDefaultExecutionTasks();
+  const tasks = record.tasks ?? [];
   const [filter, setFilter] = useState<'Todos' | 'Pendentes' | 'Em andamento' | 'Aguardando aprovação' | 'Concluídos' | 'Rejeitados'>('Todos');
   const [selectedTaskId, setSelectedTaskId] = useState(tasks[0]?.id ?? '');
   const [editingTask, setEditingTask] = useState<ExecutionTask | null>(null);
@@ -8143,6 +8130,16 @@ function OfficeExecutionPanel({
     description: '',
     status: 'Em andamento'
   });
+
+  useEffect(() => {
+    if (!tasks.length) {
+      if (selectedTaskId) setSelectedTaskId('');
+      return;
+    }
+    if (!selectedTaskId || !tasks.some((task) => task.id === selectedTaskId)) {
+      setSelectedTaskId(tasks[0].id);
+    }
+  }, [tasks, selectedTaskId]);
 
   function update<K extends keyof OfficeAction>(field: K, value: OfficeAction[K]) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -8163,7 +8160,7 @@ function OfficeExecutionPanel({
     if (filter === 'Rejeitados') return task.status === 'Rejeitado';
     return task.status === filter;
   });
-  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? tasks[0];
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? tasks[0] ?? null;
 
   function saveNotes() {
     onUpdateNotes(process.id, internalNotes);
@@ -8208,12 +8205,27 @@ function OfficeExecutionPanel({
             <button className={filter === item ? 'filter-chip active' : 'filter-chip'} type="button" onClick={() => setFilter(item)} key={item}>{item}</button>
           ))}
           <button className="filter-chip execution-add-task-button" type="button" onClick={() => setIsAddingTask(true)}>
-            <FilePlus size={15} /> Nova etapa
+            <FilePlus size={15} /> Criar nova etapa
           </button>
         </div>
 
         <div className="execution-task-grid">
-          {filteredTasks.map((task) => (
+          {tasks.length === 0 ? (
+            <div className="execution-empty-state">
+              <div className="empty-state-icon"><FilePlus size={24} /></div>
+              <h3>Nenhuma etapa criada</h3>
+              <p>Crie uma etapa personalizada para organizar as ações necessárias deste processo.</p>
+              <button className="primary-button dark" type="button" onClick={() => setIsAddingTask(true)}>
+                <FilePlus size={16} /> Criar nova etapa
+              </button>
+            </div>
+          ) : filteredTasks.length === 0 ? (
+            <div className="execution-empty-state">
+              <h3>Nenhuma etapa neste filtro</h3>
+              <p>Altere o filtro ou crie uma nova etapa personalizada para este processo.</p>
+              <button className="secondary-light-button" type="button" onClick={() => setFilter('Todos')}>Ver todas</button>
+            </div>
+          ) : filteredTasks.map((task) => (
             <article className={`execution-task-card status-${getExecutionStatusClass(task.status)}`} key={task.id} onClick={() => setSelectedTaskId(task.id)}>
               <div className="execution-task-header">
                 <div>
@@ -8260,20 +8272,22 @@ function OfficeExecutionPanel({
           ))}
         </div>
 
-        <section className="execution-suggested-box">
-          <p className="eyebrow">Documentos sugeridos</p>
-          <h3>{selectedTask?.title ?? 'Etapa operacional'}</h3>
-          <div className="suggested-document-list">
-            {(selectedTask?.suggestedDocuments ?? []).map((documentName) => (
-              <span key={documentName}>{documentName}</span>
-            ))}
-          </div>
-          <div className="execution-alert-list">
-            {(selectedTask?.suggestedDocuments ?? []).filter((category) => !documents.some((document) => normalizeText(document.category).includes(normalizeText(category)) || normalizeText(document.name).includes(normalizeText(category)))).slice(0, 4).map((category) => (
-              <strong key={category}>Atenção: {category} não encontrado</strong>
-            ))}
-          </div>
-        </section>
+        {selectedTask ? (
+          <section className="execution-suggested-box">
+            <p className="eyebrow">Documentos sugeridos</p>
+            <h3>{selectedTask.title}</h3>
+            <div className="suggested-document-list">
+              {(selectedTask.suggestedDocuments ?? []).map((documentName) => (
+                <span key={documentName}>{documentName}</span>
+              ))}
+            </div>
+            <div className="execution-alert-list">
+              {(selectedTask.suggestedDocuments ?? []).filter((category) => !documents.some((document) => normalizeText(document.category).includes(normalizeText(category)) || normalizeText(document.name).includes(normalizeText(category)))).slice(0, 4).map((category) => (
+                <strong key={category}>Atenção: {category} não encontrado</strong>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="execution-notes-panel">
           <p className="eyebrow">Observações internas</p>
@@ -8379,7 +8393,7 @@ function CustomExecutionTaskModal({
       <div className="form-heading">
         <div>
           <p className="eyebrow">Formulário personalizado</p>
-          <h2>Nova etapa</h2>
+          <h2>Criar nova etapa</h2>
         </div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar nova etapa"><X size={18} /></button>
       </div>
@@ -8410,26 +8424,50 @@ function FieldExecutionPanel({
   onAttachDocuments: (process: EnvironmentalProcess, fileItems: DocumentUploadItem[], category: string) => void | Promise<void>;
   onDeleteDocument: (documentId: string) => boolean | void | Promise<boolean | void>;
 }) {
-  const visits = record.fieldVisits;
-  const checklist = record.fieldChecklist ?? defaultFieldChecklist;
-  const [form, setForm] = useState<FieldVisit>({
-    date: new Date().toLocaleDateString('pt-BR'),
-    responsible: '',
-    location: '',
-    coordinates: '',
-    notes: '',
-    checklist: '',
-    status: 'Agendada'
-  });
+  const visits = record.fieldVisits ?? [];
+  const checklist = record.fieldChecklist ?? [];
+  const [isChecklistModalOpen, setIsChecklistModalOpen] = useState(false);
+  const [editingChecklistItem, setEditingChecklistItem] = useState<FieldChecklistItem | null>(null);
+  const [isVisitModalOpen, setIsVisitModalOpen] = useState(false);
+  const [editingVisit, setEditingVisit] = useState<FieldVisit | null>(null);
+  const fieldDocumentCount = documents.filter((document) => {
+    const category = normalizeText(document.category);
+    return category.includes('campo') || category.includes('anexo') || category.includes('foto');
+  }).length;
 
-  function update<K extends keyof FieldVisit>(field: K, value: FieldVisit[K]) {
-    setForm((current) => ({ ...current, [field]: value }));
+  function openNewChecklistModal() {
+    setEditingChecklistItem(null);
+    setIsChecklistModalOpen(true);
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    onAdd(process.id, form);
-    setForm({ date: new Date().toLocaleDateString('pt-BR'), responsible: '', location: '', coordinates: '', notes: '', checklist: '', status: 'Agendada' });
+  function openChecklistEditModal(item: FieldChecklistItem) {
+    setEditingChecklistItem(item);
+    setIsChecklistModalOpen(true);
+  }
+
+  function openNewVisitModal() {
+    setEditingVisit(null);
+    setIsVisitModalOpen(true);
+  }
+
+  function openVisitEditModal(visit: FieldVisit) {
+    setEditingVisit(visit);
+    setIsVisitModalOpen(true);
+  }
+
+  function saveChecklistItem(item: FieldChecklistItem) {
+    onUpdateFieldChecklist(process.id, item);
+    setIsChecklistModalOpen(false);
+    setEditingChecklistItem(null);
+  }
+
+  function saveFieldVisit(visit: FieldVisit, files: File[]) {
+    if (files.length) {
+      onAttachDocuments(process, files, 'Anexos de campo');
+    }
+    onAdd(process.id, visit);
+    setIsVisitModalOpen(false);
+    setEditingVisit(null);
   }
 
   function removeFieldAttachment(item: FieldChecklistItem, fileName: string) {
@@ -8449,79 +8487,291 @@ function FieldExecutionPanel({
 
   return (
     <div className="field-execution-layout">
-      <section className="panel-soft">
-        <p className="eyebrow">Checklist de campo</p>
-        <h3>Controle rápido da visita</h3>
-        <div className="field-checklist-grid">
-          {checklist.map((item) => (
-            <article className={`field-check-card status-${getExecutionStatusClass(item.status)}`} key={item.id}>
-              <strong>{item.title}</strong>
-              <select value={item.status} onChange={(event) => onUpdateFieldChecklist(process.id, { ...item, status: event.target.value as FieldChecklistItem['status'] })}>
-                <option>Não iniciado</option>
-                <option>Em andamento</option>
-                <option>Concluído</option>
-                <option>Pendente</option>
-              </select>
-              <textarea value={item.observation} onChange={(event) => onUpdateFieldChecklist(process.id, { ...item, observation: event.target.value })} placeholder="Observação do item..." />
-              <label className="secondary-light-button">
-                <UploadCloud size={15} /> Anexos
-                <input multiple type="file" onChange={(event) => {
-                  const fileItems = Array.from(event.target.files ?? []);
-                  const fileNames = fileItems.map((file) => file.name);
-                  if (fileNames.length) {
-                    onAttachDocuments(process, fileItems, 'Anexos do processo');
-                    onUpdateFieldChecklist(process.id, { ...item, attachments: [...item.attachments, ...fileNames] });
-                  }
-                  event.target.value = '';
-                }} />
-              </label>
-              {item.attachments.length > 0 ? (
-                <div className="task-attachment-list compact">
-                  {item.attachments.map((fileName) => (
-                    <div className="task-attachment-row" key={`${item.id}-${fileName}`}>
-                      <FileText size={14} />
-                      <span>{fileName}</span>
-                      <button type="button" className="danger" onClick={() => removeFieldAttachment(item, fileName)} aria-label={`Excluir ${fileName}`}>
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              <small>{item.attachments.length} anexo(s)</small>
-            </article>
-          ))}
+      <section className="field-command-panel">
+        <div>
+          <p className="eyebrow">Departamento técnico campo</p>
+          <h3>Atuação em campo</h3>
+          <p>Crie checklists e registre fichas apenas quando houver necessidade de atuação em campo.</p>
+        </div>
+        <div className="field-command-actions">
+          <button className="secondary-light-button" type="button" onClick={openNewChecklistModal}>
+            <ClipboardCheck size={16} /> Criar checklist de campo
+          </button>
+          <button className="primary-button dark" type="button" onClick={openNewVisitModal}>
+            <MapPin size={16} /> Registrar ficha de campo
+          </button>
         </div>
       </section>
 
-      <form className="technical-analysis-form" onSubmit={submit}>
-        <div className="analysis-heading">
+      <section className="panel-soft">
+        <div className="field-section-heading">
           <div>
-            <p className="eyebrow">Departamento técnico campo</p>
-            <h3>Ficha de campo</h3>
+            <p className="eyebrow">Checklist de campo</p>
+            <h3>Itens criados</h3>
           </div>
-          <MapPin size={24} />
+          <span>{checklist.length} item(ns)</span>
         </div>
-        <div className="form-grid">
-          <label>Data da visita<input value={form.date} onChange={(event) => update('date', event.target.value)} /></label>
-          <label>Responsável campo<input value={form.responsible} onChange={(event) => update('responsible', event.target.value)} placeholder="Técnico de campo" /></label>
-          <label>Local visitado<input value={form.location} onChange={(event) => update('location', event.target.value)} placeholder="Propriedade ou referência" /></label>
-          <label>Coordenadas<input value={form.coordinates} onChange={(event) => update('coordinates', event.target.value)} placeholder="-15.0000, -43.0000" /></label>
-          <label>Status<select value={form.status} onChange={(event) => update('status', event.target.value as FieldVisit['status'])}><option>Agendada</option><option>Realizada</option><option>Pendente</option></select></label>
-          <label className="wide-field">Checklist<textarea value={form.checklist} onChange={(event) => update('checklist', event.target.value)} placeholder="Fotos, coordenadas, anotações, documentos coletados..." /></label>
-          <label className="wide-field">Anotações<textarea value={form.notes} onChange={(event) => update('notes', event.target.value)} placeholder="Registre informações coletadas in loco" /></label>
-        </div>
-        <div className="upload-dropzone compact real-upload">
-          <UploadCloud size={22} />
-          <strong>Anexar fotos e documentos de campo</strong>
-          <span>Área preparada para fotos, documentos e registros da visita.</span>
-          <label className="file-upload-button">Selecionar arquivos<input multiple type="file" accept="image/*,.pdf,.doc,.docx" /></label>
-        </div>
-        <div className="form-actions"><span /><button className="primary-button dark" type="submit">Salvar ficha de campo</button></div>
-      </form>
+        {checklist.length === 0 ? (
+          <div className="execution-empty-state compact">
+            <h3>Nenhum item de checklist criado</h3>
+            <p>Crie itens personalizados somente para as ações de campo necessárias neste processo.</p>
+            <button className="secondary-light-button" type="button" onClick={openNewChecklistModal}>Criar checklist de campo</button>
+          </div>
+        ) : (
+          <div className="field-checklist-grid">
+            {checklist.map((item) => (
+              <article className={`field-check-card status-${getExecutionStatusClass(item.status)}`} key={item.id}>
+                <div className="field-check-card-header">
+                  <strong>{item.title}</strong>
+                  <span className={`execution-status status-${getExecutionStatusClass(item.status)}`}>{item.status}</span>
+                </div>
+                <p>{item.observation || 'Sem observação registrada.'}</p>
+                {item.attachments.length > 0 ? (
+                  <div className="task-attachment-list compact">
+                    {item.attachments.map((fileName) => (
+                      <div className="task-attachment-row" key={`${item.id}-${fileName}`}>
+                        <FileText size={14} />
+                        <span>{fileName}</span>
+                        <button type="button" className="danger" onClick={() => removeFieldAttachment(item, fileName)} aria-label={`Excluir ${fileName}`}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="field-card-actions">
+                  <button type="button" className="secondary-light-button" onClick={() => openChecklistEditModal(item)}><Pencil size={15} /> Atualizar item</button>
+                  <label className="secondary-light-button">
+                    <UploadCloud size={15} /> Anexos
+                    <input multiple type="file" onChange={(event) => {
+                      const fileItems = Array.from(event.target.files ?? []);
+                      const fileNames = fileItems.map((file) => file.name);
+                      if (fileNames.length) {
+                        onAttachDocuments(process, fileItems, 'Anexos de campo');
+                        onUpdateFieldChecklist(process.id, { ...item, attachments: [...item.attachments, ...fileNames] });
+                      }
+                      event.target.value = '';
+                    }} />
+                  </label>
+                  <span>{item.attachments.length} anexo(s)</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
-      <ExecutionList title="Visitas registradas" items={visits.map((visit) => ({ title: visit.location || 'Visita técnica', meta: `${visit.date} - ${visit.status}`, description: `${visit.responsible} ${visit.coordinates ? '- ' + visit.coordinates : ''} ${visit.notes}` }))} />
+      <section className="panel-soft">
+        <div className="field-section-heading">
+          <div>
+            <p className="eyebrow">Visitas registradas</p>
+            <h3>Fichas de campo</h3>
+          </div>
+          <span>{visits.length} visita(s)</span>
+        </div>
+        {visits.length === 0 ? (
+          <div className="execution-empty-state compact">
+            <h3>Nenhuma visita registrada</h3>
+            <p>Registre uma ficha de campo quando houver visita, coleta de coordenadas, fotos ou observações em campo.</p>
+            <button className="primary-button dark" type="button" onClick={openNewVisitModal}>Registrar ficha de campo</button>
+          </div>
+        ) : (
+          <div className="field-visit-grid">
+            {visits.map((visit) => (
+              <article className={`field-visit-card status-${getExecutionStatusClass(visit.status)}`} key={visit.id ?? `${visit.date}-${visit.location}`}>
+                <div className="field-check-card-header">
+                  <strong>{visit.location || 'Visita técnica'}</strong>
+                  <span className={`execution-status status-${getExecutionStatusClass(visit.status)}`}>{visit.status}</span>
+                </div>
+                <div className="field-visit-meta">
+                  <span>Data <strong>{visit.date || 'Sem data'}</strong></span>
+                  <span>Responsável <strong>{visit.responsible || 'Não informado'}</strong></span>
+                  <span>Coordenadas <strong>{visit.coordinates || 'Não informadas'}</strong></span>
+                  <span>Anexos de campo <strong>{fieldDocumentCount}</strong></span>
+                </div>
+                <p>{visit.notes || visit.checklist || 'Sem anotações registradas.'}</p>
+                <div className="field-card-actions">
+                  <button type="button" className="secondary-light-button" onClick={() => openVisitEditModal(visit)}><Pencil size={15} /> Ver/editar ficha</button>
+                  {visit.status !== 'Realizada' ? (
+                    <button type="button" className="secondary-light-button" onClick={() => onAdd(process.id, { ...visit, status: 'Realizada' })}>
+                      <CheckCircle2 size={15} /> Marcar como realizada
+                    </button>
+                  ) : null}
+                  <label className="secondary-light-button">
+                    <UploadCloud size={15} /> Anexos
+                    <input multiple type="file" accept="image/*,.pdf,.doc,.docx" onChange={(event) => {
+                      const fileItems = Array.from(event.target.files ?? []);
+                      if (fileItems.length) onAttachDocuments(process, fileItems, 'Anexos de campo');
+                      event.target.value = '';
+                    }} />
+                  </label>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {isChecklistModalOpen ? (
+        <div className="modal-backdrop nested-modal">
+          <FieldChecklistItemModal
+            existingItems={checklist}
+            item={editingChecklistItem}
+            onClose={() => { setIsChecklistModalOpen(false); setEditingChecklistItem(null); }}
+            onSave={saveChecklistItem}
+          />
+        </div>
+      ) : null}
+
+      {isVisitModalOpen ? (
+        <div className="modal-backdrop nested-modal">
+          <FieldVisitModal
+            visit={editingVisit}
+            onClose={() => { setIsVisitModalOpen(false); setEditingVisit(null); }}
+            onSave={saveFieldVisit}
+          />
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function FieldChecklistItemModal({
+  existingItems,
+  item,
+  onClose,
+  onSave
+}: {
+  existingItems: FieldChecklistItem[];
+  item: FieldChecklistItem | null;
+  onClose: () => void;
+  onSave: (item: FieldChecklistItem) => void;
+}) {
+  const [form, setForm] = useState<FieldChecklistItem>(item ?? {
+    id: '',
+    title: '',
+    status: 'Não iniciado',
+    observation: '',
+    attachments: []
+  });
+  const [error, setError] = useState('');
+
+  function update<K extends keyof FieldChecklistItem>(field: K, value: FieldChecklistItem[K]) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = form.title.trim();
+    if (!title) {
+      setError('Informe o nome do item.');
+      return;
+    }
+    const hasDuplicate = existingItems.some((currentItem) => currentItem.id !== item?.id && normalizeText(currentItem.title) === normalizeText(title));
+    if (hasDuplicate) {
+      setError('Já existe um item com esse nome neste checklist.');
+      return;
+    }
+
+    onSave({
+      ...form,
+      id: item?.id || createCustomFieldChecklistItemId(title),
+      dbId: item?.dbId,
+      title
+    });
+  }
+
+  return (
+    <form className="panel modal-card field-checklist-item-modal" onSubmit={submit}>
+      <div className="form-heading">
+        <div>
+          <p className="eyebrow">Checklist de campo</p>
+          <h2>{item ? 'Atualizar item do checklist' : 'Criar item do checklist'}</h2>
+        </div>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar checklist de campo"><X size={18} /></button>
+      </div>
+      <div className="form-grid">
+        <label>Nome do item<input value={form.title} onChange={(event) => { update('title', event.target.value); setError(''); }} placeholder="Visita realizada" autoFocus /></label>
+        <label>Status inicial<select value={form.status} onChange={(event) => update('status', event.target.value as FieldChecklistItem['status'])}>
+          <option>Não iniciado</option>
+          <option>Em andamento</option>
+          <option>Concluído</option>
+          <option>Pendente</option>
+        </select></label>
+        <label className="wide-field">Observação inicial<textarea value={form.observation} onChange={(event) => update('observation', event.target.value)} placeholder="Detalhes, pendências ou orientações de campo..." /></label>
+      </div>
+      {error ? <p className="form-error-text">{error}</p> : null}
+      <div className="form-actions">
+        <button className="secondary-light-button" type="button" onClick={onClose}>Cancelar</button>
+        <button className="primary-button dark" type="submit">Salvar item</button>
+      </div>
+    </form>
+  );
+}
+
+function FieldVisitModal({
+  visit,
+  onClose,
+  onSave
+}: {
+  visit: FieldVisit | null;
+  onClose: () => void;
+  onSave: (visit: FieldVisit, files: File[]) => void;
+}) {
+  const [form, setForm] = useState<FieldVisit>(visit ?? {
+    date: new Date().toLocaleDateString('pt-BR'),
+    responsible: '',
+    location: '',
+    coordinates: '',
+    notes: '',
+    checklist: '',
+    status: 'Agendada'
+  });
+  const [files, setFiles] = useState<File[]>([]);
+
+  function update<K extends keyof FieldVisit>(field: K, value: FieldVisit[K]) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSave(form, files);
+  }
+
+  return (
+    <form className="panel modal-card field-visit-modal" onSubmit={submit}>
+      <div className="form-heading">
+        <div>
+          <p className="eyebrow">Departamento técnico campo</p>
+          <h2>Ficha de campo</h2>
+          <span>Registre informações coletadas durante a visita técnica.</span>
+        </div>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar ficha de campo"><X size={18} /></button>
+      </div>
+      <div className="form-grid">
+        <label>Data da visita<input value={form.date} onChange={(event) => update('date', event.target.value)} /></label>
+        <label>Responsável campo<input value={form.responsible} onChange={(event) => update('responsible', event.target.value)} placeholder="Técnico de campo" /></label>
+        <label>Local visitado<input value={form.location} onChange={(event) => update('location', event.target.value)} placeholder="Propriedade ou referência" /></label>
+        <label>Coordenadas<input value={form.coordinates} onChange={(event) => update('coordinates', event.target.value)} placeholder="-15.0000, -43.0000" /></label>
+        <label>Status<select value={form.status} onChange={(event) => update('status', event.target.value as FieldVisit['status'])}>
+          <option>Agendada</option>
+          <option>Realizada</option>
+          <option>Pendente</option>
+        </select></label>
+        <label className="wide-field">Checklist geral<textarea value={form.checklist} onChange={(event) => update('checklist', event.target.value)} placeholder="Fotos, coordenadas, documentos coletados..." /></label>
+        <label className="wide-field">Anotações<textarea value={form.notes} onChange={(event) => update('notes', event.target.value)} placeholder="Registre informações coletadas in loco" /></label>
+      </div>
+      <div className="upload-dropzone compact real-upload">
+        <UploadCloud size={22} />
+        <strong>Anexar fotos e documentos de campo</strong>
+        <span>{files.length ? `${files.length} arquivo(s) selecionado(s)` : 'Os arquivos serão enviados ao salvar a ficha.'}</span>
+        <label className="file-upload-button">Selecionar arquivos<input multiple type="file" accept="image/*,.pdf,.doc,.docx" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} /></label>
+      </div>
+      <div className="form-actions">
+        <button className="secondary-light-button" type="button" onClick={onClose}>Cancelar</button>
+        <button className="primary-button dark" type="submit">Salvar ficha de campo</button>
+      </div>
+    </form>
   );
 }
 

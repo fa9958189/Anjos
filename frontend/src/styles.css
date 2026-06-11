@@ -2928,6 +2928,39 @@ a { color: inherit; text-decoration: none; }
   grid-template-columns: repeat(2, minmax(340px, 1fr));
   gap: 14px;
 }
+.execution-empty-state {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  min-height: 260px;
+  padding: 32px 24px;
+  border: 1px dashed #bfd4b8;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fbfdf8 0%, #f4faef 100%);
+  color: #627063;
+  text-align: center;
+}
+.execution-empty-state h3 {
+  margin: 0;
+  color: #14261a;
+  font-size: 1.25rem;
+}
+.execution-empty-state p {
+  max-width: 480px;
+  margin: 0;
+  line-height: 1.5;
+}
+.execution-empty-state .empty-state-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  background: #e8f3df;
+  color: #244f2a;
+}
 .execution-task-card {
   display: grid;
   gap: 12px;
@@ -3027,7 +3060,8 @@ a { color: inherit; text-decoration: none; }
   justify-content: space-between;
 }
 .execution-task-actions label,
-.field-check-card label {
+.field-check-card label,
+.field-card-actions label {
   cursor: pointer;
 }
 .execution-task-actions input,
@@ -3151,24 +3185,117 @@ a { color: inherit; text-decoration: none; }
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
+.field-command-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid #dce8d6;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fbfdf8 0%, #eef7e8 100%);
+}
+.field-command-panel h3,
+.field-section-heading h3 {
+  margin: 0;
+  color: #14261a;
+}
+.field-command-panel p:not(.eyebrow) {
+  max-width: 620px;
+  margin: 6px 0 0;
+  color: #627063;
+  line-height: 1.45;
+}
+.field-command-actions,
+.field-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.field-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.field-section-heading span,
+.field-card-actions span {
+  color: #78907b;
+  font-size: 0.88rem;
+  font-weight: 900;
+}
+.execution-empty-state.compact {
+  min-height: 180px;
+  padding: 24px;
+}
 .field-checklist-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 .field-check-card {
   display: grid;
-  gap: 10px;
-  padding: 13px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid #e5eddf;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #ffffff;
 }
-.field-check-card strong {
+.field-check-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.field-check-card strong,
+.field-visit-card strong {
   color: #14261a;
 }
-.field-check-card textarea {
-  min-height: 72px;
+.field-check-card p,
+.field-visit-card p {
+  margin: 0;
+  color: #627063;
+  line-height: 1.45;
+}
+.field-visit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.field-visit-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #e5eddf;
+  border-radius: 10px;
+  background: #ffffff;
+}
+.field-visit-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.field-visit-meta span {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid #edf3e9;
+  border-radius: 8px;
+  color: #78907b;
+  background: #fbfdf8;
+  font-weight: 800;
+}
+.field-visit-meta strong {
+  overflow-wrap: anywhere;
+  color: #14261a;
+}
+.field-checklist-item-modal {
+  width: min(720px, 100%);
+}
+.field-visit-modal {
+  width: min(900px, 100%);
 }
 .finance-layout {
   display: grid;
@@ -3398,7 +3525,8 @@ a { color: inherit; text-decoration: none; }
   .execution-header-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .execution-task-grid { grid-template-columns: 1fr; }
   .execution-history-layout { grid-template-columns: 1fr; }
-  .field-checklist-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .field-checklist-grid,
+  .field-visit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .followup-document-header-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .finance-layout { grid-template-columns: 1fr; }
   .finance-list-grid { grid-template-columns: 1fr; }
@@ -3439,7 +3567,16 @@ a { color: inherit; text-decoration: none; }
   .execution-header-grid,
   .execution-progress-grid,
   .execution-task-details,
-  .field-checklist-grid { grid-template-columns: 1fr; }
+  .field-checklist-grid,
+  .field-visit-grid,
+  .field-visit-meta { grid-template-columns: 1fr; }
+  .field-command-panel,
+  .field-section-heading { display: grid; }
+  .field-command-actions,
+  .field-card-actions { display: grid; }
+  .field-command-actions button,
+  .field-card-actions button,
+  .field-card-actions label { width: 100%; }
   .finance-card-grid,
   .properties-grid,
   .property-info-grid,
