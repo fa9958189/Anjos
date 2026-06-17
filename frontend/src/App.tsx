@@ -698,6 +698,9 @@ type DocumentRecord = {
   storagePath?: string;
   mimeType?: string;
   fileSize?: number;
+  previewAction?: () => void;
+  downloadAction?: () => void;
+  generatedLabel?: string;
   id: string;
   name: string;
   category: string;
@@ -2403,6 +2406,10 @@ function parseStoredDocumentPath(filePath?: string | null) {
 
 function hasValidDocumentStorage(document: DocumentRecord): document is DocumentRecord & { bucket: string; storagePath: string } {
   return Boolean(document.bucket?.trim() && document.storagePath?.trim());
+}
+
+function hasAvailableDocumentFile(document: DocumentRecord) {
+  return hasValidDocumentStorage(document) || Boolean(document.previewAction || document.downloadAction);
 }
 
 function mapDbDocumentToDocument(document: DbDocument, processes: EnvironmentalProcess[]): DocumentRecord {
@@ -4301,6 +4308,49 @@ export function App() {
     }
   }
 
+  async function attachSignedContract(contract: ContractRecord, files: File[]) {
+    const signedFile = files[0];
+    if (!signedFile) return;
+
+    const linkedProcess = processes.find((process) => process.id === contract.processId);
+    if (!linkedProcess) {
+      await showAppAlert({
+        title: 'Processo não encontrado',
+        message: 'Não foi possível localizar o processo vinculado a este contrato para anexar o arquivo assinado.',
+        type: 'error'
+      });
+      return;
+    }
+
+    await attachProcessDocuments(linkedProcess, [signedFile], 'Contrato');
+
+    if (contract.dbId) {
+      const { error } = await supabase
+        .from('contracts')
+        .update({ signed_file_name: signedFile.name })
+        .eq('id', contract.dbId);
+
+      if (error) {
+        await showAppAlert({
+          title: 'Contrato anexado com ressalva',
+          message: 'O arquivo foi enviado, mas não foi possível atualizar o nome do contrato assinado no cadastro do contrato.',
+          type: 'warning',
+          technicalDetails: error.message
+        });
+      }
+    }
+
+    setContracts((current) => current.map((item) => (
+      item.id === contract.id ? { ...item, signedFileName: signedFile.name } : item
+    )));
+
+    await showAppAlert({
+      title: 'Contrato assinado anexado',
+      message: 'O contrato assinado foi salvo e já estará disponível na Central Documental do Acompanhamento.',
+      type: 'success'
+    });
+  }
+
 
   useEffect(() => {
     if (!isAuthenticated || processes.length === 0) return;
@@ -5036,6 +5086,7 @@ export function App() {
             }}
             onSave={saveContract}
             onActivateContract={activateContract}
+            onAttachSignedContract={attachSignedContract}
           />
         ) : null}
       </main>
@@ -5943,11 +5994,11 @@ function DocumentFolderCard({
   readOnly?: boolean;
 }) {
   const hasDocuments = documents.length > 0;
-  const validStorageDocuments = documents.filter(hasValidDocumentStorage);
-  const hasStorageFiles = validStorageDocuments.length > 0;
+  const availableDocuments = documents.filter(hasAvailableDocumentFile);
+  const hasAvailableFiles = availableDocuments.length > 0;
   const visibleDocuments = readOnly ? documents : documents.slice(0, 2);
   const folderClassName = hasDocuments
-    ? hasStorageFiles ? 'document-folder-card filled' : 'document-folder-card missing-file'
+    ? hasAvailableFiles ? 'document-folder-card filled' : 'document-folder-card missing-file'
     : 'document-folder-card';
 
   return (
@@ -5960,14 +6011,15 @@ function DocumentFolderCard({
         </div>
       </div>
       <div className="document-folder-status">
-        <span>{hasStorageFiles ? `${validStorageDocuments.length} arquivo(s)` : hasDocuments ? 'Sem arquivo' : 'Pendente'}</span>
+        <span>{hasAvailableFiles ? `${availableDocuments.length} arquivo(s)` : hasDocuments ? 'Sem arquivo' : 'Pendente'}</span>
       </div>
       {hasDocuments ? (
         <div className="document-folder-files">
           {visibleDocuments.map((document) => {
             const hasStorageFile = hasValidDocumentStorage(document);
+            const hasGeneratedFile = Boolean(document.previewAction || document.downloadAction);
             return (
-              <div className={hasStorageFile ? 'folder-file-row' : 'folder-file-row missing-file'} key={document.id}>
+              <div className={hasStorageFile || hasGeneratedFile ? 'folder-file-row' : 'folder-file-row missing-file'} key={document.id}>
                 <FileText size={14} />
                 <span title={document.fileName}>{document.fileName}</span>
                 <div className="folder-file-actions">
@@ -5979,6 +6031,19 @@ function DocumentFolderCard({
                       <button type="button" onClick={() => downloadDocument(document)} aria-label={`Baixar ${document.fileName}`}>
                         <Download size={14} />
                       </button>
+                    </>
+                  ) : hasGeneratedFile ? (
+                    <>
+                      {document.previewAction ? (
+                        <button type="button" onClick={document.previewAction} aria-label={`Visualizar ${document.fileName}`}>
+                          <Eye size={14} />
+                        </button>
+                      ) : null}
+                      {document.downloadAction ? (
+                        <button type="button" onClick={document.downloadAction} aria-label={`Baixar ${document.fileName}`}>
+                          <Download size={14} />
+                        </button>
+                      ) : null}
                     </>
                   ) : (
                     <span className="folder-file-missing" title="Este documento está registrado, mas ainda não possui arquivo válido anexado.">
@@ -7377,7 +7442,8 @@ function createVirtualDocument(
   category: string,
   process: EnvironmentalProcess,
   fileName: string,
-  uploadedBy: string
+  uploadedBy: string,
+  actions?: Pick<DocumentRecord, 'previewAction' | 'downloadAction' | 'generatedLabel'>
 ): DocumentRecord {
   return {
     id,
@@ -7389,7 +7455,8 @@ function createVirtualDocument(
     processId: process.id,
     uploadedAt: new Date().toLocaleDateString('pt-BR'),
     uploadedBy,
-    fileName
+    fileName,
+    ...actions
   };
 }
 
@@ -7406,8 +7473,16 @@ function FollowUpDocumentsModal({
 }) {
   const process = row.process;
   const virtualDocuments = [
-    row.proposal ? createVirtualDocument(`VIRT-${row.proposal.id}`, 'Proposta comercial', process, `${row.proposal.id}.pdf`, 'Comercial') : null,
-    row.contract ? createVirtualDocument(`VIRT-${row.contract.id}`, 'Contrato', process, `${row.contract.id}.pdf`, 'Jurídico') : null,
+    row.proposal ? createVirtualDocument(`VIRT-${row.proposal.id}`, 'Proposta comercial', process, `${row.proposal.id.replace('/', '-')}.pdf`, 'Comercial', {
+      generatedLabel: 'Documento gerado pelo sistema',
+      previewAction: () => openProposalPdf(row.proposal as Proposal),
+      downloadAction: () => openProposalPdf(row.proposal as Proposal, true)
+    }) : null,
+    row.contract ? createVirtualDocument(`VIRT-${row.contract.id}`, 'Contrato', process, `${row.contract.id.replace('/', '-')}.pdf`, 'Jurídico', {
+      generatedLabel: 'Contrato gerado pelo sistema',
+      previewAction: () => openContractPdf(row.contract as ContractRecord),
+      downloadAction: () => openContractPdf(row.contract as ContractRecord, true)
+    }) : null,
     row.financial?.receivedAmount ? createVirtualDocument(`VIRT-FIN-${row.financial.id}`, 'Comprovantes financeiros', process, `comprovante-entrada-${row.financial.contractId}.pdf`, 'Financeiro') : null,
     process.analysis.technicalOpinion ? createVirtualDocument(`VIRT-AN-${process.id}`, 'Análises técnicas', process, `parecer-tecnico-${process.id}.pdf`, 'Técnico escritório') : null
   ].filter(Boolean) as DocumentRecord[];
@@ -7433,9 +7508,9 @@ function FollowUpDocumentsModal({
     return 'Propriedade';
   }
 
-  const storedDocuments = allDocuments.filter(hasValidDocumentStorage);
+  const storedDocuments = allDocuments.filter(hasAvailableDocumentFile);
   const totalPending = followUpDocumentSections.reduce((total, section) => (
-    total + section.categories.filter((category) => !getCategoryDocuments(category).some(hasValidDocumentStorage)).length
+    total + section.categories.filter((category) => !getCategoryDocuments(category).some(hasAvailableDocumentFile)).length
   ), 0);
 
   return (
@@ -7504,7 +7579,8 @@ function ContractsView({
   onSelectContract,
   onClose,
   onSave,
-  onActivateContract
+  onActivateContract,
+  onAttachSignedContract
 }: {
   proposals: Proposal[];
   contracts: ContractRecord[];
@@ -7515,6 +7591,7 @@ function ContractsView({
   onClose: () => void;
   onSave: (contract: ContractRecord) => void | Promise<void>;
   onActivateContract: (contractId: string) => void | Promise<void>;
+  onAttachSignedContract: (contract: ContractRecord, files: File[]) => void | Promise<void>;
 }) {
   const contractQueueProposals = proposals.filter((proposal) => proposal.status === 'Proposta aprovada' && isProposalActive(proposal));
   const pendingContractProposals = contractQueueProposals.filter((proposal) => !contracts.some((contract) => contract.proposalId === proposal.id));
@@ -7607,6 +7684,14 @@ function ContractsView({
                 <button className="secondary-light-button" type="button" onClick={() => openContractPdf(contract, true)}>
                   <Download size={16} /> Baixar PDF
                 </button>
+                <label className="secondary-light-button">
+                  <UploadCloud size={16} /> Anexar contrato assinado
+                  <input type="file" accept=".pdf,application/pdf" onChange={(event) => {
+                    const files = Array.from(event.target.files ?? []);
+                    if (files.length) void onAttachSignedContract(contract, files);
+                    event.target.value = '';
+                  }} />
+                </label>
                 {contract.status !== 'Vigente' && contract.status !== 'Cancelado' ? (
                   <button className="primary-button dark" type="button" onClick={() => onActivateContract(contract.id)}>
                     <ClipboardCheck size={17} /> Ativar contrato
