@@ -38,7 +38,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import Lenis from 'lenis';
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { supabase, supabaseConfig } from './lib/supabase';
+import { supabase } from './lib/supabase';
 
 type DashboardStatus = 'loading' | 'empty' | 'error' | 'success';
 
@@ -1395,33 +1395,6 @@ const formatDateToDb = (value: string) => {
 
 const normalizeText = (value: string) =>
   value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-
-function getSafeAuthErrorDetails(error: unknown) {
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message
-    };
-  }
-
-  return {
-    name: 'UnknownError',
-    message: String(error)
-  };
-}
-
-function isAuthConnectionError(error: unknown) {
-  const detail = normalizeText(error instanceof Error ? `${error.name} ${error.message}` : String(error));
-  return detail.includes('failed to fetch') || detail.includes('network') || detail.includes('err_name_not_resolved');
-}
-
-function getSupabaseConnectionLoginMessage() {
-  if (!supabaseConfig.isConfigured) {
-    return 'Configuração de autenticação ausente. Verifique as variáveis do ambiente.';
-  }
-
-  return 'Não foi possível conectar ao serviço de autenticação. Tente novamente em instantes.';
-}
 
 function sanitizeStorageFileName(fileName: string) {
   const fallbackName = 'documento';
@@ -2934,44 +2907,14 @@ export function App() {
   useEffect(() => {
     let isMounted = true;
 
-    if (!supabaseConfig.isConfigured) {
-      console.warn('[Login] Supabase nao configurado para recuperar sessao', {
-        step: 'initial_session_config',
-        host: supabaseConfig.host || null,
-        error: supabaseConfig.error
-      });
-      setIsAuthenticated(false);
-      setAuthUserId(null);
-      setAuthUserEmail(null);
-      setAuthUserRole(null);
+    supabase.auth.getSession().then(({ data: sessionData }) => {
+      if (!isMounted) return;
+      setIsAuthenticated(Boolean(sessionData.session));
+      setAuthUserId(sessionData.session?.user.id ?? null);
+      setAuthUserEmail(sessionData.session?.user.email?.trim().toLowerCase() ?? null);
+      setAuthUserRole(resolveAuthRole(sessionData.session));
       setAuthLoading(false);
-      return () => {
-        isMounted = false;
-      };
-    }
-
-    supabase.auth.getSession()
-      .then(({ data: sessionData }) => {
-        if (!isMounted) return;
-        setIsAuthenticated(Boolean(sessionData.session));
-        setAuthUserId(sessionData.session?.user.id ?? null);
-        setAuthUserEmail(sessionData.session?.user.email?.trim().toLowerCase() ?? null);
-        setAuthUserRole(resolveAuthRole(sessionData.session));
-        setAuthLoading(false);
-      })
-      .catch((error: unknown) => {
-        if (!isMounted) return;
-        console.warn('[Login] Falha ao recuperar sessao Supabase', {
-          step: 'initial_session_error',
-          host: supabaseConfig.host || null,
-          error: getSafeAuthErrorDetails(error)
-        });
-        setIsAuthenticated(false);
-        setAuthUserId(null);
-        setAuthUserEmail(null);
-        setAuthUserRole(null);
-        setAuthLoading(false);
-      });
+    });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(Boolean(session));
@@ -3134,18 +3077,6 @@ export function App() {
     setLoginSubmitting(true);
     setLoginError('');
 
-    if (!supabaseConfig.isConfigured) {
-      console.warn('[Login] Configuracao Supabase invalida', {
-        email: normalizedEmail,
-        step: 'supabase_config',
-        host: supabaseConfig.host || null,
-        error: supabaseConfig.error
-      });
-      setLoginError(getSupabaseConnectionLoginMessage());
-      setLoginSubmitting(false);
-      return;
-    }
-
     console.info('[Login] Iniciando autenticação', {
       email: normalizedEmail,
       step: 'supabase_auth'
@@ -3174,7 +3105,7 @@ export function App() {
         } else if (errorMessage.includes('email not confirmed')) {
           setLoginError('Seu e-mail ainda não foi confirmado. Solicite liberação ao administrador.');
         } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
-          setLoginError(getSupabaseConnectionLoginMessage());
+          setLoginError('Não foi possível conectar ao serviço de autenticação. Tente novamente em instantes.');
         } else {
           setLoginError('Não foi possível autenticar seu acesso. Tente novamente em instantes.');
         }
@@ -3215,10 +3146,9 @@ export function App() {
       console.error('[Login] Erro inesperado no fluxo de autenticação', {
         email: normalizedEmail,
         step: 'unexpected_error',
-        host: supabaseConfig.host || null,
-        error: getSafeAuthErrorDetails(error)
+        error: error instanceof Error ? error.message : String(error)
       });
-      setLoginError(isAuthConnectionError(error) ? getSupabaseConnectionLoginMessage() : 'Não foi possível autenticar seu acesso. Tente novamente em instantes.');
+      setLoginError('Não foi possível conectar ao serviço de autenticação. Tente novamente em instantes.');
     } finally {
       setLoginSubmitting(false);
     }
