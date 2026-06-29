@@ -2838,13 +2838,13 @@ export function App() {
     if (normalizeText(authRole ?? '') === 'admin') return true;
     if (!email) return false;
 
-    const normalizedEmail = email.toLowerCase();
-    const matchedUser = users.find((user) => user.email.toLowerCase() === normalizedEmail);
+    const normalizedEmail = email.trim().toLowerCase();
+    const matchedUser = users.find((user) => user.email.trim().toLowerCase() === normalizedEmail);
     if (matchedUser) return matchedUser.role === 'Admin';
 
     const registeredAdminEmails = users
       .filter((user) => user.role === 'Admin')
-      .map((user) => user.email.toLowerCase());
+      .map((user) => user.email.trim().toLowerCase());
     if (registeredAdminEmails.includes(normalizedEmail)) return true;
 
     const principalAdminEmails = ['admin@anjosambiental.com.br', 'administrador@anjosambiental.com.br'];
@@ -2911,7 +2911,7 @@ export function App() {
       if (!isMounted) return;
       setIsAuthenticated(Boolean(sessionData.session));
       setAuthUserId(sessionData.session?.user.id ?? null);
-      setAuthUserEmail(sessionData.session?.user.email ?? null);
+      setAuthUserEmail(sessionData.session?.user.email?.trim().toLowerCase() ?? null);
       setAuthUserRole(resolveAuthRole(sessionData.session));
       setAuthLoading(false);
     });
@@ -2919,7 +2919,7 @@ export function App() {
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(Boolean(session));
       setAuthUserId(session?.user.id ?? null);
-      setAuthUserEmail(session?.user.email ?? null);
+      setAuthUserEmail(session?.user.email?.trim().toLowerCase() ?? null);
       setAuthUserRole(resolveAuthRole(session));
       setAuthLoading(false);
     });
@@ -3067,7 +3067,9 @@ export function App() {
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!loginForm.email.trim() || !loginForm.password.trim()) {
+    const normalizedEmail = loginForm.email.trim().toLowerCase();
+
+    if (!normalizedEmail || !loginForm.password) {
       setLoginError('Informe e-mail e senha para acessar o sistema.');
       return;
     }
@@ -3075,19 +3077,81 @@ export function App() {
     setLoginSubmitting(true);
     setLoginError('');
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: loginForm.email.trim(),
-      password: loginForm.password
+    console.info('[Login] Iniciando autenticação', {
+      email: normalizedEmail,
+      step: 'supabase_auth'
     });
 
-    setLoginSubmitting(false);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password: loginForm.password
+      });
 
-    if (error) {
-      setLoginError('E-mail ou senha inválidos. Confira os dados e tente novamente.');
-      return;
+      if (error) {
+        const safeAuthError = {
+          email: normalizedEmail,
+          step: 'supabase_auth_error',
+          name: error.name,
+          status: 'status' in error ? error.status : undefined,
+          code: 'code' in error ? error.code : undefined,
+          message: error.message
+        };
+        console.warn('[Login] Falha na autenticação Supabase', safeAuthError);
+
+        const errorMessage = normalizeText(error.message);
+        if (errorMessage.includes('invalid login credentials') || errorMessage.includes('invalid credentials')) {
+          setLoginError('E-mail ou senha inválidos. Confira os dados e tente novamente.');
+        } else if (errorMessage.includes('email not confirmed')) {
+          setLoginError('Seu e-mail ainda não foi confirmado. Solicite liberação ao administrador.');
+        } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+          setLoginError('Não foi possível conectar ao serviço de autenticação. Tente novamente em instantes.');
+        } else {
+          setLoginError('Não foi possível autenticar seu acesso. Tente novamente em instantes.');
+        }
+        return;
+      }
+
+      const session = data.session ?? (await supabase.auth.getSession()).data.session;
+      if (!session?.user) {
+        console.warn('[Login] Auth retornou sem sessão ativa', {
+          email: normalizedEmail,
+          step: 'missing_session'
+        });
+        setLoginError('Login realizado, mas não foi possível abrir a sessão do sistema. Tente novamente.');
+        return;
+      }
+
+      const localProfile = users.find((user) => user.email.trim().toLowerCase() === normalizedEmail);
+      console.info('[Login] Usuário autenticado no Supabase', {
+        email: normalizedEmail,
+        step: 'authenticated',
+        hasLocalProfile: Boolean(localProfile),
+        localStatus: localProfile?.status,
+        localRole: localProfile?.role,
+        metadataRole: resolveAuthRole(session)
+      });
+
+      if (localProfile?.status === 'Inativo') {
+        await supabase.auth.signOut();
+        setLoginError('Seu usuário está inativo no sistema. Solicite liberação ao administrador.');
+        return;
+      }
+
+      setAuthUserId(session.user.id);
+      setAuthUserEmail(session.user.email?.trim().toLowerCase() ?? normalizedEmail);
+      setAuthUserRole(resolveAuthRole(session) ?? localProfile?.role ?? null);
+      setIsAuthenticated(true);
+    } catch (error) {
+      console.error('[Login] Erro inesperado no fluxo de autenticação', {
+        email: normalizedEmail,
+        step: 'unexpected_error',
+        error: error instanceof Error ? error.message : String(error)
+      });
+      setLoginError('Não foi possível conectar ao serviço de autenticação. Tente novamente em instantes.');
+    } finally {
+      setLoginSubmitting(false);
     }
-
-    setIsAuthenticated(true);
   }
 
   async function handleLogout() {
