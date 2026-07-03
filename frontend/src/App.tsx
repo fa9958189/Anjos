@@ -1463,6 +1463,17 @@ const calculateProposalTotal = (services: ProposalServiceItem[]) =>
 
 const buildProposalId = (count: number) => 'PROP' + String(count + 1).padStart(3, '0') + '/' + new Date().getFullYear();
 
+const optionalProposalPersistenceColumns: readonly string[] = [
+  'proposal_objective',
+  'proposal_service_summary',
+  'is_active',
+  'version_number'
+] as const;
+
+function getMissingProposalColumn(errorMessage: string) {
+  return optionalProposalPersistenceColumns.find((column) => errorMessage.includes(column)) ?? null;
+}
+
 const getClientCityState = (client?: Pick<Client, 'city' | 'state'> | null) =>
   [client?.city, client?.state].filter(Boolean).join('/');
 
@@ -3949,7 +3960,7 @@ export function App() {
       };
 
       if (editingProposal.dbId) {
-        const updatePayload = {
+        const updatePayload: Record<string, unknown> = {
           proposal_number: updatedProposal.id,
           proposal_service_summary: updatedProposal.service || null,
           client_name: updatedProposal.client,
@@ -3971,35 +3982,40 @@ export function App() {
           observations: updatedProposal.observations || null
         };
 
-        let { error: updateError } = await supabase
-          .from('proposals')
-          .update(updatePayload)
-          .eq('id', editingProposal.dbId);
+        let updatePayloadToPersist: Record<string, unknown> = { ...updatePayload };
+        let updateErrorMessage = '';
 
-        if (updateError && updateError.message.includes('proposal_objective')) {
-          const { proposal_objective: _proposalObjective, ...legacyUpdatePayload } = updatePayload;
-          const retry = await supabase
+        for (let attempt = 0; attempt <= optionalProposalPersistenceColumns.length; attempt += 1) {
+          const { error } = await supabase
             .from('proposals')
-            .update(legacyUpdatePayload)
+            .update(updatePayloadToPersist)
             .eq('id', editingProposal.dbId);
-          updateError = retry.error;
+
+          if (!error) {
+            updateErrorMessage = '';
+            break;
+          }
+
+          updateErrorMessage = error.message;
+          const missingColumn = getMissingProposalColumn(updateErrorMessage);
+          if (!missingColumn || !(missingColumn in updatePayloadToPersist)) {
+            break;
+          }
+
+          const { [missingColumn]: _removedColumn, ...nextPayload } = updatePayloadToPersist;
+          updatePayloadToPersist = nextPayload;
+          console.warn('[Propostas] Coluna opcional indisponível no Supabase, tentando atualizar sem ela', {
+            column: missingColumn,
+            proposal: updatedProposal.id
+          });
         }
 
-        if (updateError && updateError.message.includes('proposal_service_summary')) {
-          const { proposal_service_summary: _serviceSummary, ...legacyUpdatePayload } = updatePayload;
-          const retry = await supabase
-            .from('proposals')
-            .update(legacyUpdatePayload)
-            .eq('id', editingProposal.dbId);
-          updateError = retry.error;
-        }
-
-        if (updateError) {
+        if (updateErrorMessage) {
           setIsSavingProposal(false);
           await showAppAlert({
             title: 'Não foi possível atualizar a proposta',
             message: 'O sistema encontrou um problema ao salvar as alterações da proposta.',
-            technicalDetails: updateError.message,
+            technicalDetails: updateErrorMessage,
             type: 'error',
             confirmText: 'OK'
           });
@@ -4045,7 +4061,7 @@ export function App() {
     }
 
     if (process.dbId && process.clientId) {
-      const proposalPayload = {
+      const proposalPayload: Record<string, unknown> = {
         proposal_number: proposal.id,
         proposal_service_summary: proposal.service || null,
         process_id: process.dbId,
@@ -4073,46 +4089,50 @@ export function App() {
         version_number: proposal.versionNumber
       };
 
-      let { data: insertedProposal, error: proposalError } = await supabase
-        .from('proposals')
-        .insert(proposalPayload)
-        .select('*')
-        .single();
+      let insertPayload: Record<string, unknown> = { ...proposalPayload };
+      let insertedProposal: DbProposal | null = null;
+      let proposalErrorMessage = '';
 
-      if (proposalError && proposalError.message.includes('proposal_objective')) {
-        const { proposal_objective: _proposalObjective, ...legacyProposalPayload } = proposalPayload;
-        const retry = await supabase
+      for (let attempt = 0; attempt <= optionalProposalPersistenceColumns.length; attempt += 1) {
+        const { data, error } = await supabase
           .from('proposals')
-          .insert(legacyProposalPayload)
+          .insert(insertPayload)
           .select('*')
           .single();
-        insertedProposal = retry.data;
-        proposalError = retry.error;
+
+        if (!error && data) {
+          insertedProposal = data as DbProposal;
+          proposalErrorMessage = '';
+          break;
+        }
+
+        proposalErrorMessage = error?.message ?? 'Erro desconhecido ao salvar proposta.';
+        const missingColumn = getMissingProposalColumn(proposalErrorMessage);
+        if (!missingColumn || !(missingColumn in insertPayload)) {
+          break;
+        }
+
+        const { [missingColumn]: _removedColumn, ...nextPayload } = insertPayload;
+        insertPayload = nextPayload;
+        console.warn('[Propostas] Coluna opcional indisponível no Supabase, tentando salvar sem ela', {
+          column: missingColumn,
+          proposal: proposal.id
+        });
       }
 
-      if (proposalError && proposalError.message.includes('proposal_service_summary')) {
-        const { proposal_service_summary: _serviceSummary, ...legacyProposalPayload } = proposalPayload;
-        const retry = await supabase
-          .from('proposals')
-          .insert(legacyProposalPayload)
-          .select('*')
-          .single();
-        insertedProposal = retry.data;
-        proposalError = retry.error;
+      if (!insertedProposal) {
+        setIsSavingProposal(false);
+        await showAppAlert({
+          title: 'Não foi possível gerar a proposta',
+          message: 'A proposta não foi salva no banco de dados. Corrija o problema indicado e tente gerar novamente.',
+          technicalDetails: proposalErrorMessage,
+          type: 'error',
+          confirmText: 'OK'
+        });
+        return;
       }
 
-      if (proposalError && (proposalError.message.includes('is_active') || proposalError.message.includes('version_number'))) {
-        const { is_active: _isActive, version_number: _versionNumber, ...legacyProposalPayload } = proposalPayload;
-        const retry = await supabase
-          .from('proposals')
-          .insert(legacyProposalPayload)
-          .select('*')
-          .single();
-        insertedProposal = retry.data;
-        proposalError = retry.error;
-      }
-
-      if (!proposalError && insertedProposal) {
+      {
         const servicePayload = proposal.services.map((service, index) => ({
           proposal_id: insertedProposal.id,
           description: service.description,
@@ -4121,7 +4141,18 @@ export function App() {
         }));
 
         if (servicePayload.length > 0) {
-          await supabase.from('proposal_services').insert(servicePayload);
+          const { error: serviceError } = await supabase.from('proposal_services').insert(servicePayload);
+          if (serviceError) {
+            setIsSavingProposal(false);
+            await showAppAlert({
+              title: 'Não foi possível salvar os serviços da proposta',
+              message: 'A proposta principal foi criada, mas a lista de serviços não foi salva corretamente. Tente editar a proposta e salvar novamente.',
+              technicalDetails: serviceError.message,
+              type: 'warning',
+              confirmText: 'OK'
+            });
+            return;
+          }
         }
 
         await supabase
