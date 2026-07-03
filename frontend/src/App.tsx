@@ -1463,6 +1463,33 @@ const calculateProposalTotal = (services: ProposalServiceItem[]) =>
 
 const buildProposalId = (count: number) => 'PROP' + String(count + 1).padStart(3, '0') + '/' + new Date().getFullYear();
 
+const buildProposalIdFromSequence = (sequence: number, year = new Date().getFullYear()) =>
+  'PROP' + String(sequence).padStart(3, '0') + '/' + year;
+
+function readProposalSequence(proposalNumber: string, year = new Date().getFullYear()) {
+  const match = proposalNumber.trim().match(new RegExp(`^PROP(\\d+)\\/${year}$`, 'i'));
+  return match ? Number(match[1]) : 0;
+}
+
+function getNextAvailableProposalId(existingProposalIds: string[], requestedProposalId?: string) {
+  const normalizedExistingIds = new Set(existingProposalIds.map((id) => id.trim()).filter(Boolean));
+  const normalizedRequestedId = requestedProposalId?.trim() ?? '';
+  if (normalizedRequestedId && !normalizedExistingIds.has(normalizedRequestedId)) {
+    return normalizedRequestedId;
+  }
+
+  const currentYear = new Date().getFullYear();
+  let nextSequence = Math.max(0, ...existingProposalIds.map((id) => readProposalSequence(id, currentYear))) + 1;
+  let nextProposalId = buildProposalIdFromSequence(nextSequence, currentYear);
+
+  while (normalizedExistingIds.has(nextProposalId)) {
+    nextSequence += 1;
+    nextProposalId = buildProposalIdFromSequence(nextSequence, currentYear);
+  }
+
+  return nextProposalId;
+}
+
 const optionalProposalPersistenceColumns: readonly string[] = [
   'proposal_objective',
   'proposal_service_summary',
@@ -3906,17 +3933,40 @@ export function App() {
     setProposalForm((current) => ({ ...current, [field]: value }));
   }
 
+  async function resolveAvailableProposalId(requestedProposalId: string) {
+    const localProposalIds = proposals.map((proposal) => proposal.id);
+
+    const { data, error } = await supabase
+      .from('proposals')
+      .select('proposal_number');
+
+    if (error) {
+      console.warn('[Propostas] Não foi possível consultar numeração existente, usando lista local', {
+        requestedProposalId,
+        error: error.message
+      });
+      return getNextAvailableProposalId(localProposalIds, requestedProposalId);
+    }
+
+    const dbProposalIds = (data ?? [])
+      .map((row) => row.proposal_number)
+      .filter((proposalNumber): proposalNumber is string => Boolean(proposalNumber));
+
+    return getNextAvailableProposalId([...localProposalIds, ...dbProposalIds], requestedProposalId);
+  }
+
   async function handleProposalSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const process = processes.find((item) => item.id === selectedProposalProcessId);
     if (!process) return;
     setIsSavingProposal(true);
 
+    const proposalId = editingProposalId ? proposalForm.id : await resolveAvailableProposalId(proposalForm.id || buildProposalId(proposals.length));
     const totalValue = calculateProposalTotal(proposalForm.services);
     const entryValue = totalValue * (proposalForm.entryPercentage / 100);
     const remainingValue = totalValue - entryValue;
     const proposal: Proposal = {
-      id: proposalForm.id || buildProposalId(proposals.length),
+      id: proposalId,
       processId: process.id,
       client: proposalForm.client || process.client,
       clientPhone: proposalForm.phone || process.clientPhone,
@@ -4092,8 +4142,9 @@ export function App() {
       let insertPayload: Record<string, unknown> = { ...proposalPayload };
       let insertedProposal: DbProposal | null = null;
       let proposalErrorMessage = '';
+      const attemptedProposalIds = [proposal.id];
 
-      for (let attempt = 0; attempt <= optionalProposalPersistenceColumns.length; attempt += 1) {
+      for (let attempt = 0; attempt <= optionalProposalPersistenceColumns.length + 6; attempt += 1) {
         const { data, error } = await supabase
           .from('proposals')
           .insert(insertPayload)
@@ -4107,6 +4158,17 @@ export function App() {
         }
 
         proposalErrorMessage = error?.message ?? 'Erro desconhecido ao salvar proposta.';
+        if (isDuplicateKeyError(error) && proposalErrorMessage.includes('proposal_number')) {
+          const nextProposalId = getNextAvailableProposalId([...proposals.map((item) => item.id), ...attemptedProposalIds], proposal.id);
+          attemptedProposalIds.push(nextProposalId);
+          proposal.id = nextProposalId;
+          insertPayload = { ...insertPayload, proposal_number: nextProposalId };
+          console.warn('[Propostas] Número da proposta já existia, tentando próximo número disponível', {
+            proposal: nextProposalId
+          });
+          continue;
+        }
+
         const missingColumn = getMissingProposalColumn(proposalErrorMessage);
         if (!missingColumn || !(missingColumn in insertPayload)) {
           break;
