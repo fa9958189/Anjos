@@ -3586,6 +3586,549 @@ a { color: inherit; text-decoration: none; }
   .service-board { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    background: linear-gradient(180deg, #edf4e8 0%, #f8fbf4 42%, #eef6ea 100%);
+  }
+
+  .app-shell {
+    display: block;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  .sidebar {
+    top: 0;
+    left: 0;
+    z-index: 60;
+    width: min(86vw, 334px);
+    max-width: calc(100vw - 28px);
+    height: 100dvh;
+    padding: 18px 14px calc(22px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    border-right: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 0 22px 22px 0;
+    box-shadow: 0 24px 80px rgba(5, 18, 10, 0.34);
+  }
+
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+
+  .brand {
+    justify-content: flex-start;
+    padding: 4px 6px 18px;
+  }
+
+  .sidebar-brand-logo {
+    width: min(190px, 72%);
+  }
+
+  .nav-list {
+    gap: 10px;
+  }
+
+  .nav-item {
+    min-height: 50px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    font-size: 0.98rem;
+    font-weight: 800;
+  }
+
+  .nav-item svg {
+    width: 21px;
+    height: 21px;
+  }
+
+  .main-content {
+    width: 100%;
+    max-width: 100%;
+    padding: 12px 12px calc(26px + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+  }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 35;
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) 48px;
+    gap: 10px;
+    align-items: center;
+    margin: -12px -12px 14px;
+    padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+    border-bottom: 1px solid rgba(17, 37, 26, 0.08);
+    background: rgba(244, 247, 241, 0.94);
+    backdrop-filter: blur(16px);
+    box-shadow: 0 12px 30px rgba(18, 48, 29, 0.08);
+  }
+
+  .topbar .icon-button,
+  .topbar .logout-button {
+    width: 48px;
+    height: 48px;
+    min-height: 48px;
+    border-radius: 14px;
+  }
+
+  .topbar .search-box {
+    min-height: 48px;
+    padding: 0 12px;
+    border-radius: 14px;
+    box-shadow: 0 10px 22px rgba(30, 55, 35, 0.08);
+  }
+
+  .topbar .search-box input {
+    min-width: 0;
+    font-size: 0.96rem;
+  }
+
+  .module-view,
+  .dashboard-success-stack,
+  .client-list,
+  .proposal-ready-list,
+  .contract-list,
+  .finance-list-grid,
+  .execution-process-grid,
+  .document-library-list {
+    gap: 12px;
+  }
+
+  .hero-panel,
+  .module-header,
+  .panel,
+  .metric-card,
+  .mini-stat,
+  .client-card,
+  .proposal-ready-card,
+  .contract-card,
+  .financial-card,
+  .execution-task-card,
+  .execution-empty-state,
+  .property-card,
+  .document-library-card {
+    border-radius: 16px;
+  }
+
+  .module-header {
+    padding: 18px;
+    gap: 14px;
+  }
+
+  .module-header h1 {
+    font-size: clamp(2rem, 12vw, 2.8rem);
+    line-height: 0.98;
+  }
+
+  .module-header p:last-child {
+    font-size: 0.98rem;
+    line-height: 1.5;
+  }
+
+  .hero-panel {
+    min-height: auto;
+    padding: 20px;
+    gap: 18px;
+  }
+
+  .hero-panel h1 {
+    font-size: clamp(2.1rem, 12vw, 3.2rem);
+  }
+
+  .metrics-grid,
+  .dashboard-view .metrics-grid,
+  .module-stats-grid,
+  .content-grid,
+  .dashboard-analytics-grid,
+  .client-layout-grid,
+  .processes-layout,
+  .processes-layout.full-list .technical-process-list,
+  .proposal-layout,
+  .proposal-layout.single-column .proposal-ready-list,
+  .contract-layout,
+  .contract-list-wide,
+  .commercial-board,
+  .execution-process-grid,
+  .execution-panel,
+  .execution-workspace,
+  .execution-task-grid,
+  .execution-history-layout,
+  .finance-layout,
+  .finance-list-grid,
+  .service-board,
+  .properties-grid,
+  .property-modal-grid,
+  .document-folder-grid,
+  .followup-document-sections {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-analytics-grid > .panel,
+  .dashboard-analytics-grid > .dashboard-wide-panel {
+    grid-column: 1 / -1;
+  }
+
+  .metric-card {
+    min-height: 104px;
+    padding: 16px;
+  }
+
+  .metric-card strong,
+  .mini-stat strong {
+    font-size: clamp(1.65rem, 9vw, 2.2rem);
+  }
+
+  .client-card,
+  .proposal-ready-card,
+  .contract-card,
+  .property-card,
+  .document-library-card,
+  .execution-task-card {
+    padding: 14px;
+  }
+
+  .client-main,
+  .proposal-card-header,
+  .property-card-header,
+  .execution-task-header {
+    align-items: flex-start;
+  }
+
+  .client-contact,
+  .client-card-actions,
+  .proposal-info-grid,
+  .proposal-process-summary,
+  .proposal-generated-summary,
+  .proposal-financial-grid,
+  .payment-method-grid,
+  .generated-modal-summary,
+  .contract-actions,
+  .finance-card-grid,
+  .execution-header-grid,
+  .execution-progress-grid,
+  .execution-task-details,
+  .field-checklist-grid,
+  .field-visit-grid,
+  .field-visit-meta,
+  .followup-document-header-grid,
+  .property-info-grid,
+  .property-detail-grid,
+  .document-meta-grid,
+  .process-summary-grid,
+  .process-card-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .client-card-actions,
+  .proposal-actions,
+  .contract-actions,
+  .execution-task-actions,
+  .field-command-actions,
+  .field-card-actions,
+  .wizard-actions,
+  .form-actions,
+  .analysis-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .client-card-actions {
+    justify-content: stretch;
+  }
+
+  .client-card-actions .icon-action-button {
+    width: 100%;
+  }
+
+  .primary-button,
+  .secondary-button,
+  .secondary-light-button,
+  .text-button,
+  .file-upload-button,
+  .followup-doc-button,
+  .execution-add-task-button,
+  .execution-task-actions label,
+  .field-card-actions label,
+  .contract-actions label {
+    min-height: 46px;
+    border-radius: 14px;
+  }
+
+  .proposal-actions button,
+  .contract-actions button,
+  .contract-actions label,
+  .field-command-actions button,
+  .field-card-actions button,
+  .field-card-actions label,
+  .execution-task-actions button,
+  .execution-task-actions label,
+  .analysis-footer button,
+  .wizard-actions button,
+  .form-actions button,
+  .module-header .primary-button,
+  .client-toolbar .primary-button,
+  .hero-actions button {
+    width: 100%;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .form-grid,
+  .stepper,
+  .proposal-service-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .form-grid input,
+  .form-grid select,
+  .form-grid textarea,
+  .custom-execution-task-modal input {
+    min-height: 48px;
+    border-radius: 14px;
+  }
+
+  .form-grid textarea,
+  .contract-clause-textarea,
+  .proposal-service-editor-textarea {
+    min-height: 130px;
+  }
+
+  .modal-backdrop {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .modal-card {
+    width: min(100%, calc(100vw - 20px));
+    max-height: calc(92dvh - env(safe-area-inset-top));
+    border-radius: 20px 20px 16px 16px;
+    padding: 16px;
+    overscroll-behavior: contain;
+  }
+
+  .client-documents-modal,
+  .commercial-proposal-modal,
+  .contract-modal,
+  .execution-modal,
+  .followup-documents-modal,
+  .payment-modal,
+  .property-modal,
+  .service-modal,
+  .process-modal-card,
+  .user-modal {
+    width: min(100%, calc(100vw - 20px));
+  }
+
+  .form-heading {
+    position: sticky;
+    top: -16px;
+    z-index: 4;
+    margin: -16px -16px 10px;
+    padding: 16px;
+    border-bottom: 1px solid #e5eddf;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(12px);
+  }
+
+  .form-heading h2 {
+    font-size: clamp(1.35rem, 7vw, 2rem);
+    line-height: 1.05;
+    overflow-wrap: anywhere;
+  }
+
+  .analysis-footer {
+    position: sticky;
+    bottom: -16px;
+    z-index: 3;
+    margin: 10px -16px -16px;
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    border-top: 1px solid #e5eddf;
+    border-radius: 0 0 16px 16px;
+    background: rgba(250, 252, 247, 0.96);
+    backdrop-filter: blur(12px);
+  }
+
+  .followup-table {
+    overflow-x: visible;
+  }
+
+  .followup-row,
+  .process-row,
+  .dashboard-activity-row,
+  .bar-chart-row,
+  .user-card {
+    grid-template-columns: 1fr !important;
+  }
+
+  .bar-chart-row {
+    gap: 6px;
+  }
+
+  .followup-table-head {
+    display: none;
+  }
+
+  .followup-row {
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .followup-filters {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .followup-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-chip {
+    flex: 0 0 auto;
+    min-height: 42px;
+    border-radius: 999px;
+  }
+
+  .execution-documents-central {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .document-folder-card,
+  .execution-document-folder-list .document-folder-card {
+    min-height: auto;
+  }
+
+  .document-folder-actions,
+  .document-file-actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .app-dialog-card {
+    width: min(100%, calc(100vw - 24px));
+    border-radius: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    padding: 10px 10px calc(22px + env(safe-area-inset-bottom));
+  }
+
+  .topbar {
+    grid-template-columns: 46px minmax(0, 1fr) 46px;
+    margin: -10px -10px 12px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .topbar .icon-button,
+  .topbar .logout-button {
+    width: 46px;
+    height: 46px;
+    min-height: 46px;
+  }
+
+  .topbar .search-box input::placeholder {
+    color: transparent;
+  }
+
+  .module-view {
+    gap: 12px;
+  }
+
+  .module-header,
+  .panel,
+  .metric-card,
+  .mini-stat,
+  .client-card,
+  .proposal-ready-card,
+  .contract-card,
+  .financial-card,
+  .execution-task-card,
+  .property-card,
+  .document-library-card {
+    border-radius: 14px;
+  }
+
+  .module-header {
+    padding: 16px;
+  }
+
+  .module-header h1 {
+    font-size: clamp(1.9rem, 13vw, 2.45rem);
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .hero-panel {
+    padding: 18px;
+  }
+
+  .hero-panel h1 {
+    font-size: 2rem;
+  }
+
+  .status-chip {
+    max-width: 100%;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .proposal-ready-card p,
+  .contract-card p,
+  .client-card p,
+  .execution-task-card p,
+  .followup-row p {
+    overflow-wrap: anywhere;
+  }
+
+  .modal-backdrop {
+    padding: 8px;
+  }
+
+  .modal-card,
+  .client-documents-modal,
+  .commercial-proposal-modal,
+  .contract-modal,
+  .execution-modal,
+  .followup-documents-modal,
+  .payment-modal,
+  .property-modal,
+  .service-modal,
+  .process-modal-card,
+  .user-modal {
+    width: calc(100vw - 16px);
+    max-height: 94dvh;
+    border-radius: 18px;
+  }
+
+  .document-item {
+    display: grid;
+    justify-items: start;
+  }
+}
+
 @media print {
   .sidebar,
   .topbar,
