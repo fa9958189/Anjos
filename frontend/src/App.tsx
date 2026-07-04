@@ -1713,6 +1713,33 @@ function buildContractNumber(count: number) {
   return 'CONT' + String(count + 1).padStart(3, '0') + '/' + new Date().getFullYear();
 }
 
+const buildContractNumberFromSequence = (sequence: number, year = new Date().getFullYear()) =>
+  'CONT' + String(sequence).padStart(3, '0') + '/' + year;
+
+function readContractSequence(contractNumber: string, year = new Date().getFullYear()) {
+  const match = contractNumber.trim().match(new RegExp(`^CONT(\\d+)\\/${year}$`, 'i'));
+  return match ? Number(match[1]) : 0;
+}
+
+function getNextAvailableContractNumber(existingContractNumbers: string[], requestedContractNumber?: string) {
+  const normalizedExistingNumbers = new Set(existingContractNumbers.map((id) => id.trim()).filter(Boolean));
+  const normalizedRequestedNumber = requestedContractNumber?.trim() ?? '';
+  if (normalizedRequestedNumber && !normalizedExistingNumbers.has(normalizedRequestedNumber)) {
+    return normalizedRequestedNumber;
+  }
+
+  const currentYear = new Date().getFullYear();
+  let nextSequence = Math.max(0, ...existingContractNumbers.map((id) => readContractSequence(id, currentYear))) + 1;
+  let nextContractNumber = buildContractNumberFromSequence(nextSequence, currentYear);
+
+  while (normalizedExistingNumbers.has(nextContractNumber)) {
+    nextSequence += 1;
+    nextContractNumber = buildContractNumberFromSequence(nextSequence, currentYear);
+  }
+
+  return nextContractNumber;
+}
+
 function formatContractStatus(status: ContractStatus) {
   if (status === 'Vigente') return 'Contrato vigente';
   return status;
@@ -4336,20 +4363,63 @@ export function App() {
     }
   }
 
+  async function resolveAvailableContractNumber(requestedContractNumber: string) {
+    const localContractNumbers = contracts.map((contract) => contract.id);
+
+    const { data, error } = await supabase
+      .from('contracts')
+      .select('contract_number');
+
+    if (error) {
+      console.warn('[Contratos] Não foi possível consultar numeração existente, usando lista local', {
+        requestedContractNumber,
+        error: error.message
+      });
+      return getNextAvailableContractNumber(localContractNumbers, requestedContractNumber);
+    }
+
+    const dbContractNumbers = (data ?? [])
+      .map((row) => row.contract_number)
+      .filter((contractNumber): contractNumber is string => Boolean(contractNumber));
+
+    return getNextAvailableContractNumber([...localContractNumbers, ...dbContractNumbers], requestedContractNumber);
+  }
+
   async function saveContract(contract: ContractRecord) {
     const linkedProposal = proposals.find((proposal) => proposal.id === contract.proposalId);
     const linkedProcess = processes.find((process) => process.id === contract.processId);
+    const contractNumber = contract.dbId ? contract.id : await resolveAvailableContractNumber(contract.id || buildContractNumber(contracts.length));
     const contractWithRelations: ContractRecord = {
       ...contract,
+      id: contractNumber,
       proposalDbId: contract.proposalDbId ?? linkedProposal?.dbId,
       processDbId: contract.processDbId ?? linkedProcess?.dbId,
       clientDbId: contract.clientDbId ?? linkedProcess?.clientId,
       propertyDbId: contract.propertyDbId ?? linkedProcess?.propertyId
     };
 
-    if (contractWithRelations.proposalDbId && contractWithRelations.processDbId && contractWithRelations.clientDbId) {
-      const contractPayload = mapContractToDb(contractWithRelations, linkedProposal);
-      const { data: savedContract, error: contractError } = contractWithRelations.dbId
+    if (!contractWithRelations.proposalDbId || !contractWithRelations.processDbId || !contractWithRelations.clientDbId) {
+      await showAppAlert({
+        title: 'Não foi possível salvar o contrato',
+        message: 'O contrato não possui todos os vínculos necessários com proposta, processo e cliente. Atualize a página e tente novamente.',
+        technicalDetails: JSON.stringify({
+          proposalDbId: contractWithRelations.proposalDbId ?? null,
+          processDbId: contractWithRelations.processDbId ?? null,
+          clientDbId: contractWithRelations.clientDbId ?? null
+        }),
+        type: 'error',
+        confirmText: 'OK'
+      });
+      return false;
+    }
+
+    let contractPayload = mapContractToDb(contractWithRelations, linkedProposal);
+    let savedContract: DbContract | null = null;
+    let contractErrorMessage = '';
+    const attemptedContractNumbers = [contractWithRelations.id];
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const result = contractWithRelations.dbId
         ? await supabase
           .from('contracts')
           .update(contractPayload)
@@ -4362,55 +4432,103 @@ export function App() {
           .select('*, proposals(proposal_number, approved_at), processes(process_number)')
           .single();
 
-      if (contractError) {
-        window.alert('Não foi possível salvar o contrato no Supabase. Tente novamente.');
-        return;
+      if (!result.error && result.data) {
+        savedContract = result.data as DbContract;
+        contractErrorMessage = '';
+        break;
       }
 
-      if (savedContract) {
-        const dbContract = savedContract as DbContract;
-        contractWithRelations.dbId = dbContract.id;
+      contractErrorMessage = result.error?.message ?? 'Erro desconhecido ao salvar contrato.';
+      if (!contractWithRelations.dbId && isDuplicateKeyError(result.error) && contractErrorMessage.includes('contract_number')) {
+        const nextContractNumber = getNextAvailableContractNumber([...contracts.map((item) => item.id), ...attemptedContractNumbers], contractWithRelations.id);
+        attemptedContractNumbers.push(nextContractNumber);
+        contractWithRelations.id = nextContractNumber;
+        contractPayload = mapContractToDb(contractWithRelations, linkedProposal);
+        console.warn('[Contratos] Número do contrato já existia, tentando próximo número disponível', {
+          contract: nextContractNumber
+        });
+        continue;
+      }
 
-        if (!contract.dbId) {
-          const totalValue = parseCurrency(contractWithRelations.value);
-          const financialSnapshot = getProposalFinancialSnapshot(linkedProposal, totalValue);
+      break;
+    }
 
-          const financialPayload = {
-            contract_id: dbContract.id,
-            proposal_id: contractWithRelations.proposalDbId,
-            process_id: contractWithRelations.processDbId,
-            client_id: contractWithRelations.clientDbId,
-            status: 'aguardando_entrada',
-            client_name: contractWithRelations.client,
-            service_description: contractWithRelations.service,
-            total_value: totalValue,
-            entry_percentage: financialSnapshot.entryPercentage,
-            entry_value: financialSnapshot.entryAmount,
-            remaining_value: financialSnapshot.remainingAmount,
-            expected_payment_date: formatDateToDb(contractWithRelations.contractDate)
-          };
+    if (!savedContract) {
+      await showAppAlert({
+        title: 'Não foi possível salvar o contrato',
+        message: 'O contrato não foi salvo no banco de dados. Corrija o problema indicado e tente novamente.',
+        technicalDetails: contractErrorMessage,
+        type: 'error',
+        confirmText: 'OK'
+      });
+      return false;
+    }
 
-          const { data: existingFinancial } = await supabase
-            .from('financial_records')
-            .select('id')
-            .eq('contract_id', dbContract.id)
-            .maybeSingle();
+    const dbContract = savedContract;
+    contractWithRelations.dbId = dbContract.id;
 
-          if (existingFinancial?.id) {
-            await supabase.from('financial_records').update(financialPayload).eq('id', existingFinancial.id);
-          } else {
-            await supabase.from('financial_records').insert(financialPayload);
-          }
+    if (!contract.dbId) {
+      const totalValue = parseCurrency(contractWithRelations.value);
+      const financialSnapshot = getProposalFinancialSnapshot(linkedProposal, totalValue);
+
+      const financialPayload = {
+        contract_id: dbContract.id,
+        proposal_id: contractWithRelations.proposalDbId,
+        process_id: contractWithRelations.processDbId,
+        client_id: contractWithRelations.clientDbId,
+        status: 'aguardando_entrada',
+        client_name: contractWithRelations.client,
+        service_description: contractWithRelations.service,
+        total_value: totalValue,
+        entry_percentage: financialSnapshot.entryPercentage,
+        entry_value: financialSnapshot.entryAmount,
+        remaining_value: financialSnapshot.remainingAmount,
+        expected_payment_date: formatDateToDb(contractWithRelations.contractDate)
+      };
+
+      const { data: existingFinancial } = await supabase
+        .from('financial_records')
+        .select('id')
+        .eq('contract_id', dbContract.id)
+        .maybeSingle();
+
+      if (existingFinancial?.id) {
+        const { error: financialUpdateError } = await supabase.from('financial_records').update(financialPayload).eq('id', existingFinancial.id);
+        if (financialUpdateError) {
+          await showAppAlert({
+            title: 'Contrato salvo, mas financeiro não foi atualizado',
+            message: 'O contrato foi salvo, porém houve um problema ao preparar o financeiro vinculado.',
+            technicalDetails: financialUpdateError.message,
+            type: 'warning',
+            confirmText: 'OK'
+          });
+          return false;
         }
-
-        await supabase
-          .from('processes')
-          .update({
-            current_stage: 'Etapa 05 - Jurídico e contratos',
-            responsible: contractWithRelations.responsible || 'Jurídico'
-          })
-          .eq('id', contractWithRelations.processDbId);
+      } else {
+        const { error: financialInsertError } = await supabase.from('financial_records').insert(financialPayload);
+        if (financialInsertError) {
+          await showAppAlert({
+            title: 'Contrato salvo, mas financeiro não foi criado',
+            message: 'O contrato foi salvo, porém houve um problema ao preparar o financeiro vinculado.',
+            technicalDetails: financialInsertError.message,
+            type: 'warning',
+            confirmText: 'OK'
+          });
+          return false;
+        }
       }
+    }
+
+    const { error: processUpdateError } = await supabase
+      .from('processes')
+      .update({
+        current_stage: 'Etapa 05 - Jurídico e contratos',
+        responsible: contractWithRelations.responsible || 'Jurídico'
+      })
+      .eq('id', contractWithRelations.processDbId);
+
+    if (processUpdateError) {
+      console.warn('[Contratos] Contrato salvo, mas etapa do processo não foi atualizada', processUpdateError);
     }
 
     setContracts((current) => {
@@ -4422,6 +4540,7 @@ export function App() {
     if (contractWithRelations.dbId) {
       await refreshDashboard();
     }
+    return true;
   }
 
   async function activateContract(contractId: string) {
@@ -7746,7 +7865,7 @@ function ContractsView({
   onSelectProposal: (proposalId: string) => void;
   onSelectContract: (contractId: string) => void;
   onClose: () => void;
-  onSave: (contract: ContractRecord) => void | Promise<void>;
+  onSave: (contract: ContractRecord) => boolean | Promise<boolean>;
   onActivateContract: (contractId: string) => void | Promise<void>;
   onAttachSignedContract: (contract: ContractRecord, files: File[]) => void | Promise<void>;
 }) {
@@ -7890,7 +8009,7 @@ function ContractModal({
   contract: ContractRecord | null;
   contractsCount: number;
   onClose: () => void;
-  onSave: (contract: ContractRecord) => void | Promise<void>;
+  onSave: (contract: ContractRecord) => boolean | Promise<boolean>;
 }) {
   const source = contract ?? proposal;
   const [isSaving, setIsSaving] = useState(false);
@@ -7954,9 +8073,11 @@ function ContractModal({
       generatedAt: form.generatedAt ?? new Date().toLocaleDateString('pt-BR')
     };
     setIsSaving(true);
-    await onSave(generatedContract);
+    const wasSaved = await onSave(generatedContract);
     setIsSaving(false);
-    openContractPdf(generatedContract, true);
+    if (wasSaved) {
+      openContractPdf(generatedContract, true);
+    }
   }
 
   const contractClauses: Array<{
