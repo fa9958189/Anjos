@@ -553,7 +553,7 @@ type DbExecutionTask = {
   login: string | null;
   password_ref: string | null;
   observation: string | null;
-  attachments: string[] | null;
+  attachments?: string[] | null;
   suggested_documents: string[] | null;
 };
 
@@ -578,7 +578,7 @@ type DbFieldChecklistItem = {
   title: string;
   status: string | null;
   observation: string | null;
-  attachments: string[] | null;
+  attachments?: string[] | null;
 };
 
 type DbExecutionHistoryItem = {
@@ -4817,7 +4817,6 @@ export function App() {
         login: task.login || null,
         password_ref: task.password || null,
         observation: task.observation || null,
-        attachments: task.attachments,
         suggested_documents: task.suggestedDocuments
       };
       const { data: existingTask } = await supabase
@@ -4885,7 +4884,6 @@ export function App() {
         login: task.login || null,
         password_ref: task.password || null,
         observation: task.observation || null,
-        attachments: task.attachments,
         suggested_documents: task.suggestedDocuments
       };
 
@@ -4958,8 +4956,7 @@ export function App() {
         item_key: item.id,
         title: item.title,
         status: mapFieldChecklistStatusToDb(item.status),
-        observation: item.observation || null,
-        attachments: item.attachments
+        observation: item.observation || null
       };
       const existingItem = item.dbId
         ? { id: item.dbId }
