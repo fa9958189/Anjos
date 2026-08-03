@@ -351,6 +351,13 @@ type ProposalFormState = {
 
 type ContractStatus = 'Aguardando contrato' | 'Contrato gerado' | 'Vigente' | 'Cancelado';
 
+type ContractCustomClause = {
+  id: string;
+  title: string;
+  content: string;
+  sortOrder: number;
+};
+
 type ContractRecord = {
   dbId?: string;
   proposalDbId?: string;
@@ -389,6 +396,7 @@ type ContractRecord = {
   terminationClause: string;
   jurisdictionClause: string;
   observations: string;
+  customClauses: ContractCustomClause[];
   signedFileName: string;
   generatedAt?: string;
   activatedAt?: string;
@@ -422,6 +430,7 @@ type DbContract = {
   company_cnpj: string | null;
   company_address: string | null;
   company_phone: string | null;
+  custom_clauses?: unknown | null;
   signed_file_name: string | null;
   generated_at: string | null;
   activated_at: string | null;
@@ -1023,6 +1032,7 @@ const initialContracts: ContractRecord[] = [
     terminationClause: 'O presente contrato poderá ser rescindido por qualquer das partes em caso de descumprimento de quaisquer cláusulas aqui estabelecidas, mediante comunicação formal.',
     jurisdictionClause: 'Fica eleito o foro da comarca de Goiânia/GO para dirimir quaisquer controvérsias oriundas deste contrato, com renúncia expressa a qualquer outro, por mais privilegiado que seja.',
     observations: 'Contrato gerado a partir da proposta fechada e liberado para execução técnica.',
+    customClauses: [],
     signedFileName: 'contrato-mariana-costa-outorga.pdf',
     generatedAt: '22/05/2026',
     activatedAt: '22/05/2026'
@@ -1745,6 +1755,30 @@ function formatContractStatus(status: ContractStatus) {
   return status;
 }
 
+function createContractCustomClauseId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `clause-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function normalizeContractCustomClauses(value: unknown): ContractCustomClause[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((clause): clause is Record<string, unknown> => Boolean(clause) && typeof clause === 'object')
+    .map((clause, index) => ({
+      id: typeof clause.id === 'string' && clause.id.trim() ? clause.id : createContractCustomClauseId(),
+      title: typeof clause.title === 'string' ? clause.title.trim() : '',
+      content: typeof clause.content === 'string' ? clause.content.trim() : '',
+      sortOrder: typeof clause.sortOrder === 'number' && Number.isFinite(clause.sortOrder) ? clause.sortOrder : index + 1
+    }))
+    .filter((clause) => clause.title || clause.content)
+    .sort((first, second) => first.sortOrder - second.sortOrder)
+    .map((clause, index) => ({ ...clause, sortOrder: index + 1 }));
+}
+
 function getContractStatusClass(status: ContractStatus) {
   return status.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-');
 }
@@ -1786,6 +1820,7 @@ function createContractDraft(proposal: Proposal, contractsCount: number): Contra
     terminationClause: 'O presente contrato poderá ser rescindido por qualquer das partes em caso de descumprimento de quaisquer cláusulas aqui estabelecidas, mediante comunicação formal, preservando-se os valores proporcionais aos serviços já executados.',
     jurisdictionClause: 'Fica eleito o foro da comarca de Goiânia/GO para dirimir quaisquer controvérsias oriundas deste contrato, com renúncia expressa a qualquer outro, por mais privilegiado que seja.',
     observations: proposal.observations,
+    customClauses: [],
     signedFileName: '',
     generatedAt: today
   };
@@ -1794,7 +1829,7 @@ function createContractDraft(proposal: Proposal, contractsCount: number): Contra
 function buildContractHtml(contract: ContractRecord) {
   const signingCity = contract.contractorCity || 'Goiânia';
   const signingState = contract.contractorState || 'GO';
-  const clauses = [
+  const standardClauses = [
     ['CLÁUSULA PRIMEIRA - DO OBJETO', contract.objectClause],
     ['CLÁUSULA SEGUNDA - DAS OBRIGAÇÕES DA CONTRATADA', contract.contractedObligations],
     ['CLÁUSULA TERCEIRA - DAS OBRIGAÇÕES DA CONTRATANTE', contract.contractorObligations],
@@ -1803,6 +1838,9 @@ function buildContractHtml(contract: ContractRecord) {
     ['CLÁUSULA SEXTA - DA RESCISÃO', contract.terminationClause],
     ['CLÁUSULA SÉTIMA - DO FORO', contract.jurisdictionClause]
   ];
+  const customClauses = normalizeContractCustomClauses(contract.customClauses)
+    .map((clause) => [clause.title || 'Cláusula adicional', clause.content]);
+  const clauses = [...standardClauses, ...customClauses];
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -1833,7 +1871,8 @@ function buildContractHtml(contract: ContractRecord) {
     .party-text { margin-top: 10px; }
     .party-text strong { color: #14261a; }
     .clause { margin-top: 14px; }
-    .clause h3 { color: #1e4d2b; font-size: 12px; margin-bottom: 6px; text-transform: uppercase; }
+    .clause h3 { color: #1e4d2b; font-size: 12px; margin-bottom: 6px; }
+    .clause p { white-space: pre-line; }
     .signing-place { margin-top: 26px; color: #314436; font-size: 12px; text-align: right; }
     .signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 28px; }
     .signature { text-align: center; color: #14261a; font-size: 12px; }
@@ -2309,6 +2348,7 @@ function mapDbContractToContract(contract: DbContract): ContractRecord {
     terminationClause: 'O presente contrato poderá ser rescindido por qualquer das partes em caso de descumprimento de quaisquer cláusulas aqui estabelecidas, mediante comunicação formal, preservando-se os valores proporcionais aos serviços já executados.',
     jurisdictionClause: 'Fica eleito o foro da comarca de Goiânia/GO para dirimir quaisquer controvérsias oriundas deste contrato, com renúncia expressa a qualquer outro, por mais privilegiado que seja.',
     observations: '',
+    customClauses: normalizeContractCustomClauses(contract.custom_clauses),
     signedFileName: contract.signed_file_name ?? '',
     generatedAt: formatDateBR(contract.generated_at),
     activatedAt: formatDateBR(contract.activated_at)
@@ -2346,6 +2386,7 @@ function mapContractToDb(contract: ContractRecord, proposal?: Proposal) {
     company_cnpj: contract.contractedCnpj,
     company_address: contract.contractedAddress,
     company_phone: contract.contractedPhone || null,
+    custom_clauses: normalizeContractCustomClauses(contract.customClauses),
     signed_file_name: contract.signedFileName || null
   };
 }
@@ -4392,6 +4433,7 @@ export function App() {
     const contractWithRelations: ContractRecord = {
       ...contract,
       id: contractNumber,
+      customClauses: normalizeContractCustomClauses(contract.customClauses),
       proposalDbId: contract.proposalDbId ?? linkedProposal?.dbId,
       processDbId: contract.processDbId ?? linkedProcess?.dbId,
       clientDbId: contract.clientDbId ?? linkedProcess?.clientId,
@@ -4416,6 +4458,7 @@ export function App() {
     let contractPayload = mapContractToDb(contractWithRelations, linkedProposal);
     let savedContract: DbContract | null = null;
     let contractErrorMessage = '';
+    let customClausesColumnMissing = false;
     const attemptedContractNumbers = [contractWithRelations.id];
 
     for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -4439,6 +4482,8 @@ export function App() {
       }
 
       contractErrorMessage = result.error?.message ?? 'Erro desconhecido ao salvar contrato.';
+      customClausesColumnMissing = contractErrorMessage.includes('custom_clauses')
+        && /column|schema cache|could not find/i.test(contractErrorMessage);
       if (!contractWithRelations.dbId && isDuplicateKeyError(result.error) && contractErrorMessage.includes('contract_number')) {
         const nextContractNumber = getNextAvailableContractNumber([...contracts.map((item) => item.id), ...attemptedContractNumbers], contractWithRelations.id);
         attemptedContractNumbers.push(nextContractNumber);
@@ -4454,6 +4499,17 @@ export function App() {
     }
 
     if (!savedContract) {
+      if (customClausesColumnMissing) {
+        await showAppAlert({
+          title: 'Atualização do Supabase necessária',
+          message: 'A coluna de cláusulas extras ainda não existe. Execute a migration add_contract_custom_clauses.sql no Supabase SQL Editor e tente novamente.',
+          technicalDetails: "alter table if exists public.contracts\n  add column if not exists custom_clauses jsonb not null default '[]'::jsonb;",
+          type: 'warning',
+          confirmText: 'Entendi'
+        });
+        return false;
+      }
+
       await showAppAlert({
         title: 'Não foi possível salvar o contrato',
         message: 'O contrato não foi salvo no banco de dados. Corrija o problema indicado e tente novamente.',
@@ -5358,6 +5414,7 @@ export function App() {
               setSelectedContractId(null);
             }}
             onSave={saveContract}
+            onConfirm={showAppConfirm}
             onActivateContract={activateContract}
             onAttachSignedContract={attachSignedContract}
           />
@@ -7852,6 +7909,7 @@ function ContractsView({
   onSelectContract,
   onClose,
   onSave,
+  onConfirm,
   onActivateContract,
   onAttachSignedContract
 }: {
@@ -7863,6 +7921,7 @@ function ContractsView({
   onSelectContract: (contractId: string) => void;
   onClose: () => void;
   onSave: (contract: ContractRecord) => boolean | Promise<boolean>;
+  onConfirm: (dialog: Omit<AppDialogState, 'mode'>) => Promise<boolean>;
   onActivateContract: (contractId: string) => void | Promise<void>;
   onAttachSignedContract: (contract: ContractRecord, files: File[]) => void | Promise<void>;
 }) {
@@ -7988,6 +8047,7 @@ function ContractsView({
             contractsCount={contracts.length}
             onClose={onClose}
             onSave={onSave}
+            onConfirm={onConfirm}
           />
         </div>
       ) : null}
@@ -8000,13 +8060,15 @@ function ContractModal({
   contract,
   contractsCount,
   onClose,
-  onSave
+  onSave,
+  onConfirm
 }: {
   proposal: Proposal | null;
   contract: ContractRecord | null;
   contractsCount: number;
   onClose: () => void;
   onSave: (contract: ContractRecord) => boolean | Promise<boolean>;
+  onConfirm: (dialog: Omit<AppDialogState, 'mode'>) => Promise<boolean>;
 }) {
   const source = contract ?? proposal;
   const [isSaving, setIsSaving] = useState(false);
@@ -8046,6 +8108,7 @@ function ContractModal({
         terminationClause: '',
         jurisdictionClause: '',
         observations: '',
+        customClauses: [],
         signedFileName: ''
       };
     }
@@ -8061,11 +8124,45 @@ function ContractModal({
     update('signedFileName', fileName);
   }
 
+  function addCustomClause() {
+    update('customClauses', [
+      ...form.customClauses,
+      {
+        id: createContractCustomClauseId(),
+        title: '',
+        content: '',
+        sortOrder: form.customClauses.length + 1
+      }
+    ]);
+  }
+
+  function updateCustomClause(id: string, field: 'title' | 'content', value: string) {
+    update('customClauses', form.customClauses.map((clause) => (
+      clause.id === id ? { ...clause, [field]: value } : clause
+    )));
+  }
+
+  async function removeCustomClause(clause: ContractCustomClause, index: number) {
+    const shouldRemove = await onConfirm({
+      title: 'Remover cláusula extra?',
+      message: `A cláusula ${String(index + 8).padStart(2, '0')}${clause.title.trim() ? ` — ${clause.title.trim()}` : ''} será removida deste contrato.`,
+      type: 'danger',
+      confirmText: 'Remover cláusula',
+      cancelText: 'Cancelar'
+    });
+    if (!shouldRemove) return;
+
+    update('customClauses', form.customClauses
+      .filter((item) => item.id !== clause.id)
+      .map((item, itemIndex) => ({ ...item, sortOrder: itemIndex + 1 })));
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextStatus: ContractStatus = form.status === 'Vigente' ? 'Vigente' : 'Contrato gerado';
     const generatedContract: ContractRecord = {
       ...form,
+      customClauses: normalizeContractCustomClauses(form.customClauses),
       status: nextStatus,
       generatedAt: form.generatedAt ?? new Date().toLocaleDateString('pt-BR')
     };
@@ -8202,7 +8299,47 @@ function ContractModal({
               />
             </label>
           ))}
+          {form.customClauses.map((clause, index) => (
+            <article className="contract-clause-card contract-custom-clause-card" key={clause.id}>
+              <div className="contract-clause-header contract-custom-clause-header">
+                <span className="contract-clause-number">{String(index + 8).padStart(2, '0')}</span>
+                <span>
+                  <strong className="contract-clause-title">Cláusula extra</strong>
+                  <small>Personalize o título e o texto desta cláusula para este contrato.</small>
+                </span>
+                <button
+                  type="button"
+                  className="contract-clause-remove-button"
+                  onClick={() => void removeCustomClause(clause, index)}
+                  aria-label={`Remover cláusula extra ${index + 8}`}
+                  title="Remover cláusula"
+                >
+                  <Trash2 size={17} />
+                </button>
+              </div>
+              <label className="contract-custom-clause-field">
+                <span>Título da cláusula</span>
+                <input
+                  value={clause.title}
+                  onChange={(event) => updateCustomClause(clause.id, 'title', event.target.value)}
+                  placeholder="Ex: Cláusula oitava - Da responsabilidade documental"
+                />
+              </label>
+              <label className="contract-custom-clause-field">
+                <span>Texto da cláusula</span>
+                <textarea
+                  className="contract-clause-textarea"
+                  value={clause.content}
+                  onChange={(event) => updateCustomClause(clause.id, 'content', event.target.value)}
+                  placeholder="Digite o texto da cláusula adicional..."
+                />
+              </label>
+            </article>
+          ))}
         </div>
+        <button className="primary-button dark contract-add-clause-button" type="button" onClick={addCustomClause}>
+          <FilePlus size={18} /> Adicionar mais cláusula
+        </button>
       </section>
 
       <div className="upload-dropzone compact real-upload">
